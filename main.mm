@@ -95,7 +95,9 @@ int new_open(const char *pathname, int flags, ...) {
 
 #pragma mark - UIKit Alert Block
 
-static IMP orig_presentViewController;
+typedef void (*PresentIMP)(id, SEL, id, BOOL, id);
+static PresentIMP orig_presentViewController;
+
 void new_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BOOL animated, id completion) {
     if ([viewControllerToPresent isKindOfClass:NSClassFromString(@"UIAlertController")]) {
         NSString *title = [viewControllerToPresent valueForKey:@"title"];
@@ -104,7 +106,11 @@ void new_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BO
         if ((title && [title containsString:@"OXIDE"]) || 
             (message && [message containsString:@"security threat"])) {
             NSLog(@"[Card0zo] Blocked native security alert!");
-            if (completion) ((void(*)(id, SEL, id))completion)(nil, nil);
+            // completion — это блок void(^)(void), вызываем как блок
+            if (completion) {
+                void (^completionBlock)(void) = (void (^)(void))completion;
+                completionBlock();
+            }
             return;
         }
     }
@@ -119,7 +125,6 @@ void Init() {
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
 
-    // Явное приведение типов для fishhook
     struct rebinding access_rebinding = {"access", (void *)new_access, (void **)&orig_access};
     struct rebinding stat_rebinding = {"stat", (void *)new_stat, (void **)&orig_stat};
     struct rebinding open_rebinding = {"open", (void *)new_open, (void **)&orig_open};
@@ -128,7 +133,7 @@ void Init() {
     Class UIViewControllerClass = NSClassFromString(@"UIViewController");
     if (UIViewControllerClass) {
         Method method = class_getInstanceMethod(UIViewControllerClass, @selector(presentViewController:animated:completion:));
-        orig_presentViewController = method_setImplementation(method, (IMP)new_presentViewController);
+        orig_presentViewController = (PresentIMP)method_setImplementation(method, (IMP)new_presentViewController);
     }
     
     NSLog(@"[Card0zo] Init loaded. Hooks active.");
