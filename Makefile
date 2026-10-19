@@ -6,8 +6,9 @@ INSTALL_TARGET_PROCESSES = OXIDE
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Card0zoESP
-Card0zoESP_FILES = main.mm libtitanox/main.mm libtitanox/fishhook/fishhook.c ImGui/imgui.cpp ImGui/imgui_draw.cpp ImGui/imgui_tables.cpp ImGui/imgui_widgets.cpp ImGui/backends/imgui_impl_metal.mm
-Card0zoESP_CFLAGS = -fobjc-arc -std=c++17 -I./ImGui -I./ImGui/backends -I./libtitanox -I./libtitanox/fishhook -I.
+# Ищем файлы Titanox по всей папке, где бы они ни лежали
+Card0zoESP_FILES = main.mm $(shell find . -name "main.mm" -not -path "./main.mm") $(shell find . -name "fishhook.c") ImGui/imgui.cpp ImGui/imgui_draw.cpp ImGui/imgui_tables.cpp ImGui/imgui_widgets.cpp ImGui/backends/imgui_impl_metal.mm
+Card0zoESP_CFLAGS = -fobjc-arc -std=c++17 -I./ImGui -I./ImGui/backends -I./libtitanox -I./libtitanox/fishhook -I./libtitanox/libtitanox -I.
 Card0zoESP_FRAMEWORKS = UIKit Foundation Metal MetalKit QuartzCore
 Card0zoESP_LDFLAGS = -lstdc++
 
