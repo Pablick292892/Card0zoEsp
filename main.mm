@@ -98,8 +98,7 @@ int new_open(const char *pathname, int flags, ...) {
 
 #pragma mark - UIKit Alert Block
 
-typedef void (*PresentIMP)(id, SEL, id, BOOL, id);
-static PresentIMP orig_presentViewController;
+static IMP orig_presentViewController = NULL;
 
 void new_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BOOL animated, id completion) {
     if ([viewControllerToPresent isKindOfClass:NSClassFromString(@"UIAlertController")]) {
@@ -110,13 +109,13 @@ void new_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BO
             (message && [message containsString:@"security threat"])) {
             NSLog(@"[Card0zo] Blocked native security alert!");
             if (completion) {
-                void (^completionBlock)(void) = (void (^)(void))completion;
-                completionBlock();
+                void (^block)(void) = (void (^)(void))completion;
+                block();
             }
             return;
         }
     }
-    orig_presentViewController(self, _cmd, viewControllerToPresent, animated, completion);
+    ((void (*)(id, SEL, id, BOOL, id))orig_presentViewController)(self, _cmd, viewControllerToPresent, animated, completion);
 }
 
 #pragma mark - Entry Point
@@ -135,7 +134,7 @@ void Init() {
     Class UIViewControllerClass = NSClassFromString(@"UIViewController");
     if (UIViewControllerClass) {
         Method method = class_getInstanceMethod(UIViewControllerClass, @selector(presentViewController:animated:completion:));
-        orig_presentViewController = (PresentIMP)method_setImplementation(method, (IMP)new_presentViewController);
+        orig_presentViewController = method_setImplementation(method, (IMP)new_presentViewController);
     }
     
     NSLog(@"[Card0zo] Init loaded. Hooks active.");
