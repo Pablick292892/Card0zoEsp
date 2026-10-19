@@ -1,3 +1,6 @@
+export ARCHS = arm64
+export TARGET = 
+iphone:clang:latest:14.0
 TARGET = Card0zoESP
 ARCHS = arm64
 INSTALL_TARGET_PROCESSES = OXIDE
