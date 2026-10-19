@@ -35,4 +35,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Card0zoESP-dylib
-        path: .theos/obj/Card0zoESP.dylib
+        path: .theos/obj/debug/Card0zoESP.dylib
