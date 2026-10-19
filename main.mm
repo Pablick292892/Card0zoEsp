@@ -41,51 +41,33 @@ void* new_CC_MD5(const void *data, unsigned int len, void *md) {
     return md;
 }
 
+// Хукаем ВСЕ версии SecCode функций
 typedef int (*SecStaticCodeCheckValidity_t)(void *staticCode, unsigned int flags, void *requirement);
+typedef int (*SecStaticCodeCheckValidityWithErrors_t)(void *staticCode, unsigned int flags, void *requirement, void **errors);
+typedef int (*SecCodeCheckValidity_t)(void *staticCode, unsigned int flags, void *requirement);
+typedef int (*SecCodeCheckValidityWithErrors_t)(void *staticCode, unsigned int flags, void *requirement, void **errors);
+
 static SecStaticCodeCheckValidity_t orig_SecStaticCodeCheckValidity = NULL;
+static SecStaticCodeCheckValidityWithErrors_t orig_SecStaticCodeCheckValidityWithErrors = NULL;
+static SecCodeCheckValidity_t orig_SecCodeCheckValidity = NULL;
+static SecCodeCheckValidityWithErrors_t orig_SecCodeCheckValidityWithErrors = NULL;
 
 int new_SecStaticCodeCheckValidity(void *staticCode, unsigned int flags, void *requirement) {
     return 0;
 }
 
-// Хук dlsym — блокируем загрузку функций проверки
-typedef void* (*dlsym_t)(void* handle, const char* symbol);
-static dlsym_t orig_dlsym = NULL;
-
-void* new_dlsym(void* handle, const char* symbol) {
-    if (symbol && (strstr(symbol, "Security") || strstr(symbol, "AntiCheat") || 
-                   strstr(symbol, "Integrity") || strstr(symbol, "Validate") ||
-                   strstr(symbol, "Detect") || strstr(symbol, "Check"))) {
-        NSLog(@"[Card0zo] Blocked dlsym: %s", symbol);
-        return NULL;
-    }
-    return orig_dlsym(handle, symbol);
+int new_SecStaticCodeCheckValidityWithErrors(void *staticCode, unsigned int flags, void *requirement, void **errors) {
+    if (errors) *errors = NULL;
+    return 0;
 }
 
-// Хук dlopen — блокируем загрузку библиотек проверки
-typedef void* (*dlopen_t)(const char* path, int mode);
-static dlopen_t orig_dlopen = NULL;
-
-void* new_dlopen(const char* path, int mode) {
-    if (path && (strstr(path, "anticheat") || strstr(path, "security") || 
-                 strstr(path, "integrity"))) {
-        NSLog(@"[Card0zo] Blocked dlopen: %s", path);
-        return NULL;
-    }
-    return orig_dlopen(path, mode);
+int new_SecCodeCheckValidity(void *staticCode, unsigned int flags, void *requirement) {
+    return 0;
 }
 
-// Хук fopen — блокируем чтение бинарника игры
-typedef FILE* (*fopen_t)(const char* filename, const char* mode);
-static fopen_t orig_fopen = NULL;
-
-FILE* new_fopen(const char* filename, const char* mode) {
-    if (filename && (strstr(filename, "OXIDE.app/OXIDE") || strstr(filename, "GameAssembly"))) {
-        NSLog(@"[Card0zo] Blocked fopen: %s", filename);
-        errno = EACCES;
-        return NULL;
-    }
-    return orig_fopen(filename, mode);
+int new_SecCodeCheckValidityWithErrors(void *staticCode, unsigned int flags, void *requirement, void **errors) {
+    if (errors) *errors = NULL;
+    return 0;
 }
 
 __attribute__((constructor))
@@ -98,13 +80,13 @@ void Init() {
     struct rebinding sha256_rebinding = {"CC_SHA256", (void *)new_CC_SHA256, (void **)&orig_CC_SHA256};
     struct rebinding sha1_rebinding = {"CC_SHA1", (void *)new_CC_SHA1, (void **)&orig_CC_SHA1};
     struct rebinding md5_rebinding = {"CC_MD5", (void *)new_CC_MD5, (void **)&orig_CC_MD5};
-    struct rebinding sec_rebinding = {"SecStaticCodeCheckValidity", (void *)new_SecStaticCodeCheckValidity, (void **)&orig_SecStaticCodeCheckValidity};
-    struct rebinding dlsym_rebinding = {"dlsym", (void *)new_dlsym, (void **)&orig_dlsym};
-    struct rebinding dlopen_rebinding = {"dlopen", (void *)new_dlopen, (void **)&orig_dlopen};
-    struct rebinding fopen_rebinding = {"fopen", (void *)new_fopen, (void **)&orig_fopen};
+    struct rebinding sec1_rebinding = {"SecStaticCodeCheckValidity", (void *)new_SecStaticCodeCheckValidity, (void **)&orig_SecStaticCodeCheckValidity};
+    struct rebinding sec2_rebinding = {"SecStaticCodeCheckValidityWithErrors", (void *)new_SecStaticCodeCheckValidityWithErrors, (void **)&orig_SecStaticCodeCheckValidityWithErrors};
+    struct rebinding sec3_rebinding = {"SecCodeCheckValidity", (void *)new_SecCodeCheckValidity, (void **)&orig_SecCodeCheckValidity};
+    struct rebinding sec4_rebinding = {"SecCodeCheckValidityWithErrors", (void *)new_SecCodeCheckValidityWithErrors, (void **)&orig_SecCodeCheckValidityWithErrors};
     
     rebind_symbols((struct rebinding[8]){ptrace_rebinding, sha256_rebinding, sha1_rebinding, md5_rebinding, 
-                                          sec_rebinding, dlsym_rebinding, dlopen_rebinding, fopen_rebinding}, 8);
+                                          sec1_rebinding, sec2_rebinding, sec3_rebinding, sec4_rebinding}, 8);
     
-    NSLog(@"[Card0zo] Init loaded. Maximum bypass active.");
+    NSLog(@"[Card0zo] Init loaded. All SecCode functions hooked.");
 }
