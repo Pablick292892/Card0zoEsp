@@ -31,9 +31,9 @@ jobs:
       run: |
         curl -L https://github.com/Ragekill3377/Titanox/archive/refs/heads/main.zip -o titanox.zip
         unzip -q titanox.zip
-        # Создаем папку libtitanox и копируем туда всё содержимое Titanox-main
-        mkdir -p libtitanox
-        cp -R Titanox-main/* libtitanox/
+        # Копируем ВСЁ из архива в корень проекта, убирая вложенность
+        rm -rf libtitanox fishhook mempatch MemX static-inline-hook utils vm_funcs
+        cp -R Titanox-main/* .
 
     - name: Build Tweak
       run: |
