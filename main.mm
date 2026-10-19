@@ -119,10 +119,10 @@ void Init() {
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
 
-    // ВАЖНО: третьим полём идёт просто &orig_xxx, без (void *)
-    struct rebinding access_rebinding = {"access", (void *)new_access, &orig_access};
-    struct rebinding stat_rebinding = {"stat", (void *)new_stat, &orig_stat};
-    struct rebinding open_rebinding = {"open", (void *)new_open, &orig_open};
+    // Явное приведение типов для fishhook
+    struct rebinding access_rebinding = {"access", (void *)new_access, (void **)&orig_access};
+    struct rebinding stat_rebinding = {"stat", (void *)new_stat, (void **)&orig_stat};
+    struct rebinding open_rebinding = {"open", (void *)new_open, (void **)&orig_open};
     rebind_symbols((struct rebinding[3]){access_rebinding, stat_rebinding, open_rebinding}, 3);
 
     Class UIViewControllerClass = NSClassFromString(@"UIViewController");
