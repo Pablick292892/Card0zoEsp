@@ -9,7 +9,6 @@
 #include <mach/mach.h>
 #include "fishhook/fishhook.h"
 
-
 #pragma mark - Memory Patching Utils (IL2CPP Scanner)
 
 #define ARM64_RET 0xD65F03C0
@@ -22,7 +21,6 @@ void patch_memory(uintptr_t address, void *data, size_t len) {
 }
 
 uintptr_t find_function_prologue(uintptr_t addr) {
-    // Ищем стандартный пролог ARM64: STP X29, X30, [SP, #-imm]!
     for (int i = 0; i < 0x200; i += 4) {
         uint32_t instruction = *(uint32_t *)(addr - i);
         if ((instruction & 0xFFC003FF) == 0xA90003FD) {
@@ -41,7 +39,7 @@ void bypass_oxide_detection() {
         if (strstr(name, "GameAssembly.dylib")) {
             uintptr_t base = (uintptr_t)_dyld_get_image_header(i);
             uintptr_t current = base;
-            uintptr_t end = base + 0x10000000; // Сканируем первые 256MB (__TEXT сегмент)
+            uintptr_t end = base + 0x10000000;
             
             while (current < end) {
                 if (memcmp((void *)current, target_string, str_len) == 0) {
@@ -50,7 +48,7 @@ void bypass_oxide_detection() {
                         uint32_t ret_instr = ARM64_RET;
                         patch_memory(func_start, &ret_instr, 4);
                         printf("[Card0zo] IL2CPP Detection bypassed at: 0x%lx\n", func_start);
-                        return; // Вышли после успешного патча
+                        return;
                     }
                 }
                 current += 4;
@@ -117,18 +115,16 @@ void new_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BO
 
 __attribute__((constructor))
 void Init() {
-    // 1. Очистка окружения от следов инъекции (eSign / dyld)
     unsetenv("DYLD_INSERT_LIBRARIES");
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
 
-    // 2. Fishhook ребайндинг системных вызовов
-    struct rebinding access_rebinding = {"access", new_access, (void *)&orig_access};
-    struct rebinding stat_rebinding = {"stat", new_stat, (void *)&orig_stat};
-    struct rebinding open_rebinding = {"open", new_open, (void *)&orig_open};
+    // ВАЖНО: третьим полём идёт просто &orig_xxx, без (void *)
+    struct rebinding access_rebinding = {"access", (void *)new_access, &orig_access};
+    struct rebinding stat_rebinding = {"stat", (void *)new_stat, &orig_stat};
+    struct rebinding open_rebinding = {"open", (void *)new_open, &orig_open};
     rebind_symbols((struct rebinding[3]){access_rebinding, stat_rebinding, open_rebinding}, 3);
 
-    // 3. Хук UIKit алертов
     Class UIViewControllerClass = NSClassFromString(@"UIViewController");
     if (UIViewControllerClass) {
         Method method = class_getInstanceMethod(UIViewControllerClass, @selector(presentViewController:animated:completion:));
@@ -137,7 +133,6 @@ void Init() {
     
     NSLog(@"[Card0zo] Init loaded. Hooks active.");
 
-    // 4. Запускаем сканер IL2CPP в фоне через 3 секунды, чтобы GameAssembly точно загрузился
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         bypass_oxide_detection();
     });
