@@ -1,3 +1,4 @@
+#import <Foundation/Foundation.h>
 #include <unistd.h>
 #include <cstdlib>
 #include <dlfcn.h>
@@ -7,6 +8,7 @@
 #include <objc/runtime.h>
 #include <mach/mach.h>
 #include "fishhook/fishhook.h"
+
 
 #pragma mark - Memory Patching Utils (IL2CPP Scanner)
 
