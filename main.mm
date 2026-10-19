@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-// --- IL2CPP API (заглушки) ---
+// --- IL2CPP API ---
 typedef void* (*il2cpp_domain_get_t)();
 typedef void* (*il2cpp_domain_assembly_open_t)(void*, const char*);
 typedef void* (*il2cpp_assembly_get_image_t)(void*);
@@ -13,8 +13,6 @@ typedef void* (*il2cpp_class_from_name_t)(void*, const char*, const char*);
 typedef void* (*il2cpp_class_get_method_from_name_t)(void*, const char*, int);
 typedef void* (*il2cpp_class_get_field_from_name_t)(void*, const char*);
 typedef void* (*il2cpp_field_get_value_t)(void*, void*, void*);
-typedef void* (*il2cpp_runtime_invoke_t)(void*, void*, void**, void*);
-typedef void* (*il2cpp_object_new_t)(void*);
 
 il2cpp_domain_get_t il2cpp_domain_get;
 il2cpp_domain_assembly_open_t il2cpp_domain_assembly_open;
@@ -23,7 +21,6 @@ il2cpp_class_from_name_t il2cpp_class_from_name;
 il2cpp_class_get_method_from_name_t il2cpp_class_get_method_from_name;
 il2cpp_class_get_field_from_name_t il2cpp_class_get_field_from_name;
 il2cpp_field_get_value_t il2cpp_field_get_value;
-il2cpp_runtime_invoke_t il2cpp_runtime_invoke;
 
 void InitIL2CPP() {
     void* handle = dlopen("UnityFramework", RTLD_LAZY);
@@ -35,12 +32,6 @@ void InitIL2CPP() {
     il2cpp_class_get_method_from_name = (il2cpp_class_get_method_from_name_t)dlsym(handle, "il2cpp_class_get_method_from_name");
     il2cpp_class_get_field_from_name = (il2cpp_class_get_field_from_name_t)dlsym(handle, "il2cpp_class_get_field_from_name");
     il2cpp_field_get_value = (il2cpp_field_get_value_t)dlsym(handle, "il2cpp_field_get_value");
-    il2cpp_runtime_invoke = (il2cpp_runtime_invoke_t)dlsym(handle, "il2cpp_runtime_invoke");
-}
-
-void ApplyChams(void* playerHull, void* chamsMaterial) {
-    // Здесь должна быть логика получения SkinnedMeshRenderer и смены материала
-    // Пока это заглушка, чтобы код скомпилировался
 }
 
 __attribute__((constructor))
@@ -64,8 +55,7 @@ void Init() {
                     // Ищем класс PlayerHull
                     void* klass = il2cpp_class_from_name(image, "", "PlayerHull");
                     if (klass) {
-                        // Здесь мы должны получить список Active и пройтись по нему.
-                        // Пока просто заглушка, чтобы проверить, что класс находится.
+                        // Заглушка: класс найден
                     }
                 }
             }
