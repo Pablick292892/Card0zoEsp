@@ -17,10 +17,10 @@
 #define ARM64_RET 0xD65F03C0
 
 void patch_memory(uintptr_t address, void *data, size_t len) {
-    uintptr_t page = address & ~0xFFF;
-    mach_vm_protect(mach_task_self(), page, 0x1000, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+    vm_address_t page = address & ~0xFFF;
+    vm_protect(mach_task_self(), page, 0x1000, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
     memcpy((void *)address, data, len);
-    mach_vm_protect(mach_task_self(), page, 0x1000, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+    vm_protect(mach_task_self(), page, 0x1000, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
 }
 
 uintptr_t find_function_prologue(uintptr_t addr) {
