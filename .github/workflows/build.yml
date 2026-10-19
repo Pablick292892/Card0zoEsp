@@ -1,13 +1,18 @@
-name: Build iOS Dylib
+name: Build Tweak
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-    - uses: actions/checkout@v4
-    
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Install Theos
       run: |
         export THEOS=$HOME/theos
@@ -15,27 +20,13 @@ jobs:
         echo "$THEOS/bin" >> $GITHUB_PATH
         echo "THEOS=$THEOS" >> $GITHUB_ENV
         brew install ldid
-        
-    - name: Download ImGui
+
+    - name: Build Tweak
       run: |
-        curl -L https://github.com/ocornut/imgui/archive/refs/heads/master.zip -o imgui.zip
-        unzip -q imgui.zip
-        mv imgui-master ImGui
-        
-    - name: Download Base & Preserve Custom Files
-      run: |
-        curl -L https://github.com/Ragekill3377/Titanox/archive/refs/heads/main.zip -o titanox.zip
-        unzip -q titanox.zip
-        cp -R Titanox-main/* .
-        # ЖЕСТКО восстанавливаем твои файлы, чтобы база их не затерла
-        git checkout HEAD -- main.mm || true
-        git checkout HEAD -- Makefile || true
-        
-    - name: Build Dylib
-      run: make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
-      
+        make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Card0zoESP
+        name: Card0zoESP-dylib
         path: .theos/obj/debug/Card0zoESP.dylib
