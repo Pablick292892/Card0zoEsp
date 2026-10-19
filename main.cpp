@@ -9,7 +9,7 @@
 #include "imgui_impl_metal.h"
 
 namespace Settings {
-    bool Authenticated = true; // Временно true, так как KeyAuth отключен
+    bool Authenticated = true; // Временно true
     bool ESP_Enabled = true;
     bool ESP_Skeleton = true;
     bool ESP_Health = true;
@@ -33,48 +33,6 @@ void SetupPremiumStyle() {
     colors[ImGuiCol_Button] = ImVec4(0.15f, 0.1f, 0.2f, 1.0f);
     colors[ImGuiCol_ButtonHovered] = ImVec4(0.25f, 0.15f, 0.35f, 1.0f);
     colors[ImGuiCol_CheckMark] = ImVec4(0.6f, 0.2f, 0.8f, 1.0f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.6f, 0.2f, 0.8f, 1.0f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.7f, 0.3f, 0.9f, 1.0f);
-}
-
-bool ToggleSwitch(const char* label, bool* v) {
-    ImGuiWindow* window = ImGui::GetCurrentWindow();
-    if (window->SkipItems) return false;
-
-    ImGuiContext& g = *GImGui;
-    const ImGuiStyle& style = g.Style;
-    const ImGuiID id = window->GetID(label);
-    const ImVec2 label_size = ImGui::CalcTextSize(label, NULL, true);
-
-    const float height = ImGui::GetFrameHeight();
-    const float width = height * 1.8f;
-    const float radius = height * 0.50f;
-
-    const ImVec2 pos = window->DC.CursorPos;
-    const ImRect total_bb(pos, ImVec2(pos.x + width + (label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f), pos.y + label_size.y + style.FramePadding.y * 2.0f));
-    
-    ImGui::ItemSize(total_bb, style.FramePadding.y);
-    if (!ImGui::ItemAdd(total_bb, id)) return false;
-
-    bool hovered, held;
-    bool pressed = ImGui::ButtonBehavior(total_bb, id, &hovered, &held);
-    if (pressed) {
-        *v = !(*v);
-        ImGui::MarkItemEdited(id);
-    }
-
-    const float t = *v ? 1.0f : 0.0f; 
-    const ImU32 col_bg = ImGui::GetColorU32((hovered && held) ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
-    const ImU32 col_knob = ImGui::GetColorU32(*v ? ImVec4(0.6f, 0.2f, 0.8f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
-
-    window->DrawList->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), col_bg, height * 0.5f);
-    window->DrawList->AddCircleFilled(ImVec2(pos.x + radius + t * (width - radius * 2.0f), pos.y + radius), radius - 2.0f, col_knob);
-
-    if (label_size.x > 0.0f) {
-        ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(pos.x + width + style.ItemInnerSpacing.x, pos.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), label);
-    }
-
-    return pressed;
 }
 
 void DrawWatermark() {
@@ -93,7 +51,6 @@ void RenderESP() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x / 2, ImGui::GetIO().DisplaySize.y / 2);
     
-    // Это заглушка. Позже мы заменим её на реальное чтение памяти по твоим оффсетам.
     if (Settings::ESP_Skeleton) {
         ImU32 color = ImGui::ColorConvertFloat4ToU32(*(ImVec4*)Settings::Color_Enemy);
         draw->AddLine(ImVec2(center.x, center.y - 50), ImVec2(center.x, center.y + 50), color, 2.0f); 
@@ -117,9 +74,11 @@ void RenderLoop() {
         ImGui::Separator();
         ImGui::Text("ESP");
         ImGui::Spacing();
-        ToggleSwitch("Enable ESP", &Settings::ESP_Enabled);
-        ToggleSwitch("Skeleton", &Settings::ESP_Skeleton);
-        ToggleSwitch("Health", &Settings::ESP_Health);
+        
+        // ИСПОЛЬЗУЕМ СТАНДАРТНЫЕ ЧЕКБОКСЫ, ЧТОБЫ ИЗБЕЖАТЬ ОШИБОК
+        ImGui::Checkbox("Enable ESP", &Settings::ESP_Enabled);
+        ImGui::Checkbox("Skeleton", &Settings::ESP_Skeleton);
+        ImGui::Checkbox("Health", &Settings::ESP_Health);
         
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 40);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
