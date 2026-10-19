@@ -31,7 +31,10 @@ jobs:
       run: |
         curl -L https://github.com/Ragekill3377/Titanox/archive/refs/heads/main.zip -o titanox.zip
         unzip -q titanox.zip
-        cp -R Titanox-main/* .
+        # Копируем содержимое архива Titanox-main внутрь папки libtitanox
+        rm -rf libtitanox
+        mkdir -p libtitanox
+        cp -R Titanox-main/* libtitanox/
 
     - name: Build Tweak
       run: |
