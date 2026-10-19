@@ -12,56 +12,6 @@
 #include <errno.h>
 #include "fishhook/fishhook.h"
 
-#pragma mark - Memory Patching Utils (IL2CPP Scanner)
-
-#define ARM64_RET 0xD65F03C0
-
-void patch_memory(uintptr_t address, void *data, size_t len) {
-    vm_address_t page = address & ~0xFFF;
-    vm_protect(mach_task_self(), page, 0x1000, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
-    memcpy((void *)address, data, len);
-    vm_protect(mach_task_self(), page, 0x1000, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-}
-
-uintptr_t find_function_prologue(uintptr_t addr) {
-    for (int i = 0; i < 0x200; i += 4) {
-        uint32_t instruction = *(uint32_t *)(addr - i);
-        if ((instruction & 0xFFC003FF) == 0xA90003FD) {
-            return addr - i;
-        }
-    }
-    return 0;
-}
-
-void bypass_oxide_detection() {
-    const char *target_string = "OXIDE detected";
-    size_t str_len = strlen(target_string);
-    
-    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (strstr(name, "GameAssembly.dylib")) {
-            uintptr_t base = (uintptr_t)_dyld_get_image_header(i);
-            uintptr_t current = base;
-            uintptr_t end = base + 0x10000000;
-            
-            while (current < end) {
-                if (memcmp((void *)current, target_string, str_len) == 0) {
-                    uintptr_t func_start = find_function_prologue(current);
-                    if (func_start != 0) {
-                        uint32_t ret_instr = ARM64_RET;
-                        patch_memory(func_start, &ret_instr, 4);
-                        printf("[Card0zo] IL2CPP Detection bypassed at: 0x%lx\n", func_start);
-                        return;
-                    }
-                }
-                current += 4;
-            }
-            break;
-        }
-    }
-    printf("[Card0zo] Detection string not found or already patched.\n");
-}
-
 #pragma mark - Fishhook & System Hooks
 
 static int (*orig_access)(const char *pathname, int mode);
@@ -86,15 +36,9 @@ int new_stat(const char *pathname, struct stat *statbuf) {
     return orig_stat(pathname, statbuf);
 }
 
-static int (*orig_open)(const char *pathname, int flags, ...);
-int new_open(const char *pathname, int flags, ...) {
-    if (strstr(pathname, "/Applications/Cydia.app") || strstr(pathname, "/bin/bash") || 
-        strstr(pathname, "/usr/sbin/sshd") || strstr(pathname, "/Substitute")) {
-        errno = ENOENT;
-        return -1;
-    }
-    return orig_open(pathname, flags);
-}
+// УБРАЛИ open — он variadic и может крашить на ARM64
+// static int (*orig_open)(const char *pathname, int flags, ...);
+// int new_open(const char *pathname, int flags, ...) { ... }
 
 #pragma mark - UIKit Alert Block
 
@@ -128,8 +72,7 @@ void Init() {
 
     struct rebinding access_rebinding = {"access", (void *)new_access, (void **)&orig_access};
     struct rebinding stat_rebinding = {"stat", (void *)new_stat, (void **)&orig_stat};
-    struct rebinding open_rebinding = {"open", (void *)new_open, (void **)&orig_open};
-    rebind_symbols((struct rebinding[3]){access_rebinding, stat_rebinding, open_rebinding}, 3);
+    rebind_symbols((struct rebinding[2]){access_rebinding, stat_rebinding}, 2);
 
     Class UIViewControllerClass = NSClassFromString(@"UIViewController");
     if (UIViewControllerClass) {
@@ -137,9 +80,5 @@ void Init() {
         orig_presentViewController = method_setImplementation(method, (IMP)new_presentViewController);
     }
     
-    NSLog(@"[Card0zo] Init loaded. Hooks active.");
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        bypass_oxide_detection();
-    });
+    NSLog(@"[Card0zo] Init loaded. Hooks active. No memory scanner.");
 }
