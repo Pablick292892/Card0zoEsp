@@ -34,13 +34,6 @@ jobs:
         rm -rf libtitanox fishhook mempatch MemX static-inline-hook utils vm_funcs
         cp -R Titanox-main/* .
 
-    - name: Show Files
-      run: |
-        echo "--- Содержимое корня ---"
-        ls -la
-        echo "--- Содержимое папки libtitanox ---"
-        ls -la libtitanox || echo "Папки libtitanox нет"
-
     - name: Build Tweak
       run: |
         make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
