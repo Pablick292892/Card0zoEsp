@@ -70,8 +70,9 @@ bool ToggleSwitch(const char* label, bool* v) {
     window->DrawList->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), col_bg, height * 0.5f);
     window->DrawList->AddCircleFilled(ImVec2(pos.x + radius + t * (width - radius * 2.0f), pos.y + radius), radius - 2.0f, col_knob);
 
-    if (label_size.x > 0.0f)
-        ImGui::RenderText(ImVec2(pos.x + width + style.ItemInnerSpacing.x, pos.y + style.FramePadding.y), label);
+    if (label_size.x > 0.0f) {
+        ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(pos.x + width + style.ItemInnerSpacing.x, pos.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), label);
+    }
 
     return pressed;
 }
