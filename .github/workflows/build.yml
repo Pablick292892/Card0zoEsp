@@ -19,6 +19,7 @@ jobs:
         git clone --recursive https://github.com/theos/theos.git $THEOS
         echo "$THEOS/bin" >> $GITHUB_PATH
         echo "THEOS=$THEOS" >> $GITHUB_ENV
+        brew install ldid
 
     - name: Download ImGui
       run: |
@@ -28,10 +29,10 @@ jobs:
 
     - name: Build Tweak
       run: |
-        make package FINALPACKAGE=1 TARGET=iphone:clang:latest:14.0 ARCHS=arm64
+        make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Card0zoESP-dylib
-        path: .theos/obj/debug/Card0zoESP.dylib
+        path: .theos/obj/Card0zoESP.dylib
