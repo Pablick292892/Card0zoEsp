@@ -26,21 +26,7 @@ jobs:
         unzip imgui.zip
         mv imgui-master ImGui
 
-    - name: Download KeyAuth
-      run: |
-        # Качаем KeyAuth
-        curl -L https://github.com/KeyAuth/KeyAuth-CPP-Example/archive/refs/heads/main.zip -o keyauth.zip
-        unzip keyauth.zip
-        # Ищем файлы keyauth.h и keyauth.cpp по всей папке и копируем их в корень
-        find KeyAuth-CPP-Example-main -name "keyauth.h" -exec cp {} . \;
-        find KeyAuth-CPP-Example-main -name "keyauth.cpp" -exec cp {} . \;
-        # Проверяем, что файлы на месте
-        ls -la keyauth.*
-
     - name: Build Tweak
-      env:
-        KEYAUTH_APPNAME: ${{ secrets.KEYAUTH_APPNAME }}
-        KEYAUTH_OWNERID: ${{ secrets.KEYAUTH_OWNERID }}
       run: |
         make package FINALPACKAGE=1 TARGET=iphone:clang:latest:14.0 ARCHS=arm64
 
