@@ -7,10 +7,9 @@
 #include <cstdlib>
 #include "imgui.h"
 #include "imgui_impl_metal.h"
-#include "libtitanox.h" // Подключаем Titanox
 
 namespace Settings {
-    bool Authenticated = true;
+    bool Authenticated = true; 
     bool ESP_Enabled = true;
     bool ESP_Skeleton = true;
     bool ESP_Health = true;
@@ -60,7 +59,6 @@ void RenderESP() {
     }
 }
 
-// Тот самый цикл, который мы повесим на хук
 void RenderLoop() {
     while (true) {
         usleep(16000); 
@@ -105,17 +103,14 @@ void RenderLoop() {
     }
 }
 
-// Инициализация Titanox и запуск потока
 __attribute__((constructor))
 void Init() {
-    // Очистка переменных (чтобы античит не спалил)
     unsetenv("DYLD_INSERT_LIBRARIES");
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
 
     SetupPremiumStyle();
     
-    // Запускаем цикл отрисовки в отдельном потоке
     std::thread renderThread(RenderLoop);
     renderThread.detach();
 }
