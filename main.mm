@@ -1,21 +1,18 @@
 #include <unistd.h>
 #include <cstdlib>
-#include <string>
 #include <dlfcn.h>
-#include <thread>
-#include <objc/runtime.h>
+#include <string.h>
+#include <mach-o/dyld.h>
+#include "fishhook.h" // Упростил путь, чтобы компилятор нашел его в корне
 
-// Хук для UIAlertController
-void (*orig_presentViewController)(id, SEL, id, BOOL, id);
-void hook_presentViewController(id self, SEL _cmd, id viewController, BOOL animated, id completion) {
-    if ([viewController isKindOfClass:[UIAlertController class]]) {
-        UIAlertController *alert = (UIAlertController *)viewController;
-        if ([alert.title containsString:@"security threat"] || [alert.message containsString:@"security threat"]) {
-            // Это окно античита. Блокируем его показ.
-            return;
-        }
+static const char* (*orig_dyld_get_image_name)(uint32_t image_index);
+
+const char* hook_dyld_get_image_name(uint32_t image_index) {
+    const char* name = orig_dyld_get_image_name(image_index);
+    if (name && strstr(name, "Card0zoESP.dylib")) {
+        return "/usr/lib/libSystem.B.dylib"; 
     }
-    orig_presentViewController(self, _cmd, viewController, animated, completion);
+    return name;
 }
 
 __attribute__((constructor))
@@ -24,27 +21,8 @@ void Init() {
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
 
-    // Хукаем метод presentViewController:animated:completion: у UIViewController
-    Class uiViewControllerClass = objc_getClass("UIViewController");
-    SEL selector = sel_registerName("presentViewController:animated:completion:");
-    Method method = class_getInstanceMethod(uiViewControllerClass, selector);
-    
-    if (method) {
-        // Используем стандартный метод замены реализации (method_exchangeImplementations)
-        // В реальном проекте лучше использовать Titanox, но для теста сгодится и это
-        IMP originalImp = method_getImplementation(method);
-        orig_presentViewController = (void (*)(id, SEL, id, BOOL, id))originalImp;
-        
-        IMP newImp = imp_implementationWithBlock(^(id self, id viewController, BOOL animated, id completion) {
-            if ([viewController isKindOfClass:[UIAlertController class]]) {
-                UIAlertController *alert = (UIAlertController *)viewController;
-                if (([alert.title containsString:@"security threat"]) || ([alert.message containsString:@"security threat"])) {
-                    return; // Блокируем окно
-                }
-            }
-            orig_presentViewController(self, selector, viewController, animated, completion);
-        });
-        
-        method_setImplementation(method, newImp);
-    }
+    struct rebinding rebindings[] = {
+        {"_dyld_get_image_name", (void*)hook_dyld_get_image_name, (void**)&orig_dyld_get_image_name}
+    };
+    rebind_symbols(rebindings, 1);
 }
