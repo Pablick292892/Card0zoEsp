@@ -30,9 +30,8 @@ jobs:
       run: |
         curl -L https://github.com/KeyAuth/KeyAuth-CPP-Example/archive/refs/heads/main.zip -o keyauth.zip
         unzip keyauth.zip
-        mv KeyAuth-CPP-Example-main KeyAuth
-        cp KeyAuth/include/keyauth.h .
-        cp KeyAuth/src/keyauth.cpp .
+        find KeyAuth-CPP-Example-main -name "keyauth.h" -exec cp {} . \;
+        find KeyAuth-CPP-Example-main -name "keyauth.cpp" -exec cp {} . \;
 
     - name: Build Tweak
       env:
