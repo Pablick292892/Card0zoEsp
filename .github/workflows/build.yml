@@ -25,7 +25,6 @@ jobs:
         KEYAUTH_APPNAME: ${{ secrets.KEYAUTH_APPNAME }}
         KEYAUTH_OWNERID: ${{ secrets.KEYAUTH_OWNERID }}
       run: |
-        export TARGET=iphone:clang:latest:14.0
         make package FINALPACKAGE=1
 
     - name: Upload Artifact
