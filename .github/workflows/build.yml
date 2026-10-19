@@ -27,6 +27,16 @@ jobs:
         unzip imgui.zip
         mv imgui-master ImGui
 
+        - name: Download KeyAuth
+      run: |
+        # Скачиваем KeyAuth и распаковываем
+        curl -L https://github.com/KeyAuth/KeyAuth-CPP-Example/archive/refs/heads/main.zip -o keyauth.zip
+        unzip keyauth.zip
+        mv KeyAuth-CPP-Example-main KeyAuth
+        # Копируем файлы в корень, чтобы компилятор их нашел
+        cp KeyAuth/include/keyauth.h .
+        cp KeyAuth/src/keyauth.cpp .
+
     - name: Build Tweak
       env:
         KEYAUTH_APPNAME: ${{ secrets.KEYAUTH_APPNAME }}
