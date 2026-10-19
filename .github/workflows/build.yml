@@ -24,8 +24,19 @@ jobs:
     - name: Download ImGui
       run: |
         curl -L https://github.com/ocornut/imgui/archive/refs/heads/master.zip -o imgui.zip
-        unzip imgui.zip
+        unzip -q imgui.zip
         mv imgui-master ImGui
+
+    - name: Download Titanox
+      run: |
+        curl -L https://github.com/Ragekill3377/Titanox/archive/refs/heads/main.zip -o titanox.zip
+        unzip -q titanox.zip
+        # Копируем все папки из архива в корень проекта
+        mv Titanox-main/mempatch .
+        mv Titanox-main/fishhook .
+        mv Titanox-main/libtitanox .
+        mv Titanox-main/utils .
+        mv Titanox-main/vm_funcs .
 
     - name: Build Tweak
       run: |
