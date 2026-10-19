@@ -18,6 +18,7 @@ jobs:
         export THEOS=$HOME/theos
         git clone --recursive https://github.com/theos/theos.git $THEOS
         echo "$THEOS/bin" >> $GITHUB_PATH
+        echo "THEOS=$THEOS" >> $GITHUB_ENV
 
     - name: Build Tweak
       env:
