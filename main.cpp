@@ -4,44 +4,19 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <thread>
-#include <cstdlib> // Для getenv
+#include <cstdlib>
 #include "imgui.h"
 #include "imgui_impl_metal.h"
-#include "keyauth.h" 
 
-// ==========================================
-// 1. НАСТРОЙКИ И ОФФСЕТЫ (READ-ONLY)
-// ==========================================
 namespace Settings {
-    bool Authenticated = false;
+    bool Authenticated = true; // Временно true, так как KeyAuth отключен
     bool ESP_Enabled = true;
     bool ESP_Skeleton = true;
     bool ESP_Health = true;
-    bool ESP_Name = true;
-    bool ESP_TeamCheck = true;
     bool Watermark = true;
-    
     float Color_Enemy[4] = { 1.0f, 0.2f, 0.2f, 1.0f }; 
-    float Color_Team[4] = { 0.2f, 0.8f, 0.2f, 1.0f };  
 }
 
-// ==========================================
-// 2. KEYAUTH (Берет данные из секретов GitHub)
-// ==========================================
-std::string getEnvVar(const char* varName) {
-    const char* val = std::getenv(varName);
-    return val ? std::string(val) : "MISSING_SECRET";
-}
-
-keyauth::api KeyAuthApp(
-    getEnvVar("KEYAUTH_APPNAME"), 
-    getEnvVar("KEYAUTH_OWNERID"), 
-    "1.0"
-);
-
-// ==========================================
-// 3. СТИЛЬ МЕНЮ (Фиолетовый премиум)
-// ==========================================
 void SetupPremiumStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
@@ -62,7 +37,6 @@ void SetupPremiumStyle() {
     colors[ImGuiCol_SliderGrabActive] = ImVec4(0.7f, 0.3f, 0.9f, 1.0f);
 }
 
-// Кастомный переключатель (овальный)
 bool ToggleSwitch(const char* label, bool* v) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems) return false;
@@ -102,29 +76,23 @@ bool ToggleSwitch(const char* label, bool* v) {
     return pressed;
 }
 
-// ==========================================
-// 4. ФУНКЦИИ ОТРИСОВКИ ESP (READ-ONLY)
-// ==========================================
 void DrawWatermark() {
     if (!Settings::Watermark) return;
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     ImGuiIO& io = ImGui::GetIO();
-    
     const char* text = "CARD0ZO PREMIUM";
     ImVec2 textSize = ImGui::CalcTextSize(text);
-    
     ImVec2 pos(io.DisplaySize.x - textSize.x - 20, io.DisplaySize.y - textSize.y - 20);
-    
     draw->AddText(ImVec2(pos.x + 1, pos.y + 1), IM_COL32(0, 0, 0, 150), text);
     draw->AddText(pos, IM_COL32(150, 50, 200, 255), text);
 }
 
 void RenderESP() {
     if (!Settings::ESP_Enabled) return;
-
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x / 2, ImGui::GetIO().DisplaySize.y / 2);
     
+    // Это заглушка. Позже мы заменим её на реальное чтение памяти по твоим оффсетам.
     if (Settings::ESP_Skeleton) {
         ImU32 color = ImGui::ColorConvertFloat4ToU32(*(ImVec4*)Settings::Color_Enemy);
         draw->AddLine(ImVec2(center.x, center.y - 50), ImVec2(center.x, center.y + 50), color, 2.0f); 
@@ -133,9 +101,6 @@ void RenderESP() {
     }
 }
 
-// ==========================================
-// 5. ГЛАВНЫЙ ЦИКЛ ОТРИСОВКИ
-// ==========================================
 void RenderLoop() {
     while (true) {
         usleep(16000); 
@@ -143,34 +108,17 @@ void RenderLoop() {
         DrawWatermark();
         RenderESP();
 
-        if (!Settings::Authenticated) {
-            ImGui::Begin("Card0zo's Safe ESP - Login");
-            static char key[64] = "";
-            ImGui::Text("Enter License Key:");
-            ImGui::InputText("##key", key, 64);
-            if (ImGui::Button("Login")) {
-                // KeyAuth проверка
-                if (KeyAuthApp.license(key)) {
-                    Settings::Authenticated = true;
-                }
-            }
-            ImGui::End();
-            continue;
-        }
-
         ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
         ImGui::Begin("Card0zo ESP", nullptr, ImGuiWindowFlags_NoCollapse);
         
         ImGui::BeginChild("Sidebar", ImVec2(150, 0), true);
         ImGui::TextColored(ImVec4(0.6f, 0.2f, 0.8f, 1.0f), "CARD0ZO");
         ImGui::Separator();
-        
         ImGui::Text("ESP");
         ImGui::Spacing();
         ToggleSwitch("Enable ESP", &Settings::ESP_Enabled);
         ToggleSwitch("Skeleton", &Settings::ESP_Skeleton);
         ToggleSwitch("Health", &Settings::ESP_Health);
-        ToggleSwitch("Team Check", &Settings::ESP_TeamCheck);
         
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 40);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
@@ -186,23 +134,17 @@ void RenderLoop() {
         ImGui::TextColored(ImVec4(0.6f, 0.2f, 0.8f, 1.0f), "Visual Settings");
         ImGui::Separator();
         ImGui::Spacing();
-
         ImGui::Text("Enemy Color");
         ImGui::SameLine();
         ImGui::ColorEdit4("##enemy", Settings::Color_Enemy, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-
         ImGui::Spacing();
         ImGui::Text("Developer: Card0zo");
         ImGui::Text("License: Active");
-
         ImGui::EndChild();
         ImGui::End();
     }
 }
 
-// ==========================================
-// 6. STEALTH И ЗАПУСК
-// ==========================================
 void InitStealth() {
     unsetenv("DYLD_INSERT_LIBRARIES");
     unsetenv("DYLD_FRAMEWORK_PATH");
