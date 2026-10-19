@@ -1,0 +1,9 @@
+Package: com.card0zo.safeesp
+Name: Card0zo Safe ESP
+Depends: mobilesubstrate
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Premium Safe ESP for Oxide
+Maintainer: Card0zo
+Author: Card0zo
+Section: Tweaks
