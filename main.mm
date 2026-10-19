@@ -1,73 +1,46 @@
-#import <Foundation/Foundation.h>
 #include <unistd.h>
 #include <cstdlib>
+#include <string>
 #include <dlfcn.h>
-#include <string.h>
-#include "fishhook/fishhook.h"
+#include <thread>
+#include <vector>
 
-#define PT_DENY_ATTACH 31
+// --- IL2CPP API (заглушки) ---
+typedef void* (*il2cpp_domain_get_t)();
+typedef void* (*il2cpp_domain_assembly_open_t)(void*, const char*);
+typedef void* (*il2cpp_assembly_get_image_t)(void*);
+typedef void* (*il2cpp_class_from_name_t)(void*, const char*, const char*);
+typedef void* (*il2cpp_class_get_method_from_name_t)(void*, const char*, int);
+typedef void* (*il2cpp_class_get_field_from_name_t)(void*, const char*);
+typedef void* (*il2cpp_field_get_value_t)(void*, void*, void*);
+typedef void* (*il2cpp_runtime_invoke_t)(void*, void*, void**, void*);
+typedef void* (*il2cpp_object_new_t)(void*);
 
-typedef int (*ptrace_t)(int _request, pid_t _pid, void *_addr, int _data);
-static ptrace_t orig_ptrace = NULL;
+il2cpp_domain_get_t il2cpp_domain_get;
+il2cpp_domain_assembly_open_t il2cpp_domain_assembly_open;
+il2cpp_assembly_get_image_t il2cpp_assembly_get_image;
+il2cpp_class_from_name_t il2cpp_class_from_name;
+il2cpp_class_get_method_from_name_t il2cpp_class_get_method_from_name;
+il2cpp_class_get_field_from_name_t il2cpp_class_get_field_from_name;
+il2cpp_field_get_value_t il2cpp_field_get_value;
+il2cpp_runtime_invoke_t il2cpp_runtime_invoke;
 
-int new_ptrace(int _request, pid_t _pid, void *_addr, int _data) {
-    if (_request == PT_DENY_ATTACH) return 0;
-    return orig_ptrace(_request, _pid, _addr, _data);
+void InitIL2CPP() {
+    void* handle = dlopen("UnityFramework", RTLD_LAZY);
+    if (!handle) return;
+    il2cpp_domain_get = (il2cpp_domain_get_t)dlsym(handle, "il2cpp_domain_get");
+    il2cpp_domain_assembly_open = (il2cpp_domain_assembly_open_t)dlsym(handle, "il2cpp_domain_assembly_open");
+    il2cpp_assembly_get_image = (il2cpp_assembly_get_image_t)dlsym(handle, "il2cpp_assembly_get_image");
+    il2cpp_class_from_name = (il2cpp_class_from_name_t)dlsym(handle, "il2cpp_class_from_name");
+    il2cpp_class_get_method_from_name = (il2cpp_class_get_method_from_name_t)dlsym(handle, "il2cpp_class_get_method_from_name");
+    il2cpp_class_get_field_from_name = (il2cpp_class_get_field_from_name_t)dlsym(handle, "il2cpp_class_get_field_from_name");
+    il2cpp_field_get_value = (il2cpp_field_get_value_t)dlsym(handle, "il2cpp_field_get_value");
+    il2cpp_runtime_invoke = (il2cpp_runtime_invoke_t)dlsym(handle, "il2cpp_runtime_invoke");
 }
 
-typedef void* (*CC_SHA256_t)(const void *data, unsigned int len, void *md);
-typedef void* (*CC_SHA1_t)(const void *data, unsigned int len, void *md);
-typedef void* (*CC_MD5_t)(const void *data, unsigned int len, void *md);
-
-static CC_SHA256_t orig_CC_SHA256 = NULL;
-static CC_SHA1_t orig_CC_SHA1 = NULL;
-static CC_MD5_t orig_CC_MD5 = NULL;
-
-void* new_CC_SHA256(const void *data, unsigned int len, void *md) {
-    orig_CC_SHA256(data, len, md);
-    if (md) memset(md, 0, 4);
-    return md;
-}
-
-void* new_CC_SHA1(const void *data, unsigned int len, void *md) {
-    orig_CC_SHA1(data, len, md);
-    if (md) memset(md, 0, 4);
-    return md;
-}
-
-void* new_CC_MD5(const void *data, unsigned int len, void *md) {
-    orig_CC_MD5(data, len, md);
-    if (md) memset(md, 0, 4);
-    return md;
-}
-
-// Хукаем ВСЕ версии SecCode функций
-typedef int (*SecStaticCodeCheckValidity_t)(void *staticCode, unsigned int flags, void *requirement);
-typedef int (*SecStaticCodeCheckValidityWithErrors_t)(void *staticCode, unsigned int flags, void *requirement, void **errors);
-typedef int (*SecCodeCheckValidity_t)(void *staticCode, unsigned int flags, void *requirement);
-typedef int (*SecCodeCheckValidityWithErrors_t)(void *staticCode, unsigned int flags, void *requirement, void **errors);
-
-static SecStaticCodeCheckValidity_t orig_SecStaticCodeCheckValidity = NULL;
-static SecStaticCodeCheckValidityWithErrors_t orig_SecStaticCodeCheckValidityWithErrors = NULL;
-static SecCodeCheckValidity_t orig_SecCodeCheckValidity = NULL;
-static SecCodeCheckValidityWithErrors_t orig_SecCodeCheckValidityWithErrors = NULL;
-
-int new_SecStaticCodeCheckValidity(void *staticCode, unsigned int flags, void *requirement) {
-    return 0;
-}
-
-int new_SecStaticCodeCheckValidityWithErrors(void *staticCode, unsigned int flags, void *requirement, void **errors) {
-    if (errors) *errors = NULL;
-    return 0;
-}
-
-int new_SecCodeCheckValidity(void *staticCode, unsigned int flags, void *requirement) {
-    return 0;
-}
-
-int new_SecCodeCheckValidityWithErrors(void *staticCode, unsigned int flags, void *requirement, void **errors) {
-    if (errors) *errors = NULL;
-    return 0;
+void ApplyChams(void* playerHull, void* chamsMaterial) {
+    // Здесь должна быть логика получения SkinnedMeshRenderer и смены материала
+    // Пока это заглушка, чтобы код скомпилировался
 }
 
 __attribute__((constructor))
@@ -75,18 +48,27 @@ void Init() {
     unsetenv("DYLD_INSERT_LIBRARIES");
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
-    
-    struct rebinding ptrace_rebinding = {"ptrace", (void *)new_ptrace, (void **)&orig_ptrace};
-    struct rebinding sha256_rebinding = {"CC_SHA256", (void *)new_CC_SHA256, (void **)&orig_CC_SHA256};
-    struct rebinding sha1_rebinding = {"CC_SHA1", (void *)new_CC_SHA1, (void **)&orig_CC_SHA1};
-    struct rebinding md5_rebinding = {"CC_MD5", (void *)new_CC_MD5, (void **)&orig_CC_MD5};
-    struct rebinding sec1_rebinding = {"SecStaticCodeCheckValidity", (void *)new_SecStaticCodeCheckValidity, (void **)&orig_SecStaticCodeCheckValidity};
-    struct rebinding sec2_rebinding = {"SecStaticCodeCheckValidityWithErrors", (void *)new_SecStaticCodeCheckValidityWithErrors, (void **)&orig_SecStaticCodeCheckValidityWithErrors};
-    struct rebinding sec3_rebinding = {"SecCodeCheckValidity", (void *)new_SecCodeCheckValidity, (void **)&orig_SecCodeCheckValidity};
-    struct rebinding sec4_rebinding = {"SecCodeCheckValidityWithErrors", (void *)new_SecCodeCheckValidityWithErrors, (void **)&orig_SecCodeCheckValidityWithErrors};
-    
-    rebind_symbols((struct rebinding[8]){ptrace_rebinding, sha256_rebinding, sha1_rebinding, md5_rebinding, 
-                                          sec1_rebinding, sec2_rebinding, sec3_rebinding, sec4_rebinding}, 8);
-    
-    NSLog(@"[Card0zo] Init loaded. All SecCode functions hooked.");
+
+    InitIL2CPP();
+
+    std::thread([]() {
+        usleep(5000000); // Ждем 5 секунд
+
+        if (il2cpp_domain_get && il2cpp_domain_assembly_open) {
+            void* domain = il2cpp_domain_get();
+            void* assembly = il2cpp_domain_assembly_open(domain, "Assembly-CSharp.dll");
+            
+            if (assembly) {
+                void* image = il2cpp_assembly_get_image(assembly);
+                if (image) {
+                    // Ищем класс PlayerHull
+                    void* klass = il2cpp_class_from_name(image, "", "PlayerHull");
+                    if (klass) {
+                        // Здесь мы должны получить список Active и пройтись по нему.
+                        // Пока просто заглушка, чтобы проверить, что класс находится.
+                    }
+                }
+            }
+        }
+    }).detach();
 }
