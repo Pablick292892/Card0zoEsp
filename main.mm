@@ -5,8 +5,11 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <stdio.h>
-#include <objc/runtime.h>
 #include <mach/mach.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include <objc/runtime.h>
+#include <errno.h>
 #include "fishhook/fishhook.h"
 
 #pragma mark - Memory Patching Utils (IL2CPP Scanner)
@@ -106,7 +109,6 @@ void new_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BO
         if ((title && [title containsString:@"OXIDE"]) || 
             (message && [message containsString:@"security threat"])) {
             NSLog(@"[Card0zo] Blocked native security alert!");
-            // completion — это блок void(^)(void), вызываем как блок
             if (completion) {
                 void (^completionBlock)(void) = (void (^)(void))completion;
                 completionBlock();
