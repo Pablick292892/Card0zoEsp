@@ -3,21 +3,53 @@
 #include <cstdlib>
 #include <dlfcn.h>
 #include <string.h>
+#include <sys/ptrace.h>
 #include "fishhook/fishhook.h"
 
-// Хук CC_SHA256 из CommonCrypto
+// Хук ptrace (анти-отладка)
+typedef int (*ptrace_t)(int _request, pid_t _pid, caddr_t _addr, int _data);
+static ptrace_t orig_ptrace = NULL;
+
+int new_ptrace(int _request, pid_t _pid, caddr_t _addr, int _data) {
+    if (_request == 31) { // PT_DENY_ATTACH
+        return 0;
+    }
+    return orig_ptrace(_request, _pid, _addr, _data);
+}
+
+// Хук всех функций CommonCrypto
 typedef void* (*CC_SHA256_t)(const void *data, unsigned int len, void *md);
+typedef void* (*CC_SHA1_t)(const void *data, unsigned int len, void *md);
+typedef void* (*CC_MD5_t)(const void *data, unsigned int len, void *md);
+
 static CC_SHA256_t orig_CC_SHA256 = NULL;
+static CC_SHA1_t orig_CC_SHA1 = NULL;
+static CC_MD5_t orig_CC_MD5 = NULL;
 
 void* new_CC_SHA256(const void *data, unsigned int len, void *md) {
-    // Вызываем оригинал
     orig_CC_SHA256(data, len, md);
-    
-    // Подменяем первые 4 байта хэша на нули (сбиваем проверку)
-    if (md) {
-        memset(md, 0, 4);
-    }
+    if (md) memset(md, 0, 4);
     return md;
+}
+
+void* new_CC_SHA1(const void *data, unsigned int len, void *md) {
+    orig_CC_SHA1(data, len, md);
+    if (md) memset(md, 0, 4);
+    return md;
+}
+
+void* new_CC_MD5(const void *data, unsigned int len, void *md) {
+    orig_CC_MD5(data, len, md);
+    if (md) memset(md, 0, 4);
+    return md;
+}
+
+// Хук Security Framework (проверка кодовой подписи)
+typedef int (*SecStaticCodeCheckValidity_t)(void *staticCode, unsigned int flags, void *requirement);
+static SecStaticCodeCheckValidity_t orig_SecStaticCodeCheckValidity = NULL;
+
+int new_SecStaticCodeCheckValidity(void *staticCode, unsigned int flags, void *requirement) {
+    return 0; // Всегда возвращаем успех
 }
 
 __attribute__((constructor))
@@ -26,9 +58,18 @@ void Init() {
     unsetenv("DYLD_FRAMEWORK_PATH");
     unsetenv("DYLD_LIBRARY_PATH");
     
-    // Хукаем CC_SHA256
-    struct rebinding sha256_rebinding = {"CC_SHA256", (void *)new_CC_SHA256, (void **)&orig_CC_SHA256};
-    rebind_symbols((struct rebinding[1]){sha256_rebinding}, 1);
+    // Хук ptrace
+    struct rebinding ptrace_rebinding = {"ptrace", (void *)new_ptrace, (void **)&orig_ptrace};
     
-    NSLog(@"[Card0zo] Init loaded. SHA256 hooked.");
+    // Хук CommonCrypto
+    struct rebinding sha256_rebinding = {"CC_SHA256", (void *)new_CC_SHA256, (void **)&orig_CC_SHA256};
+    struct rebinding sha1_rebinding = {"CC_SHA1", (void *)new_CC_SHA1, (void **)&orig_CC_SHA1};
+    struct rebinding md5_rebinding = {"CC_MD5", (void *)new_CC_MD5, (void **)&orig_CC_MD5};
+    
+    // Хук Security Framework
+    struct rebinding sec_rebinding = {"SecStaticCodeCheckValidity", (void *)new_SecStaticCodeCheckValidity, (void **)&orig_SecStaticCodeCheckValidity};
+    
+    rebind_symbols((struct rebinding[5]){ptrace_rebinding, sha256_rebinding, sha1_rebinding, md5_rebinding, sec_rebinding}, 5);
+    
+    NSLog(@"[Card0zo] Init loaded. All integrity checks hooked.");
 }
