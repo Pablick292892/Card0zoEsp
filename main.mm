@@ -12,27 +12,6 @@ typedef void* Il2CppDomain;
 typedef void* Il2CppAssembly;
 typedef void* Il2CppImage;
 
-typedef struct {
-    const char* name;
-    Il2CppClass* parent;
-    void* element_class;
-    void* marshal_info;
-    void* image;
-    uint32_t token;
-    uint32_t field_count;
-    uint32_t bitfield;
-} Il2CppClassNative;
-
-typedef struct {
-    const char* name;
-    uint16_t type;
-    uint16_t typeIndex;
-    Il2CppClass* parent;
-    void* data;
-    uint32_t token;
-} Il2CppFieldInfoNative;
-
-#pragma mark - IL2CPP Runtime Functions
 typedef Il2CppDomain* (*il2cpp_domain_get_t)();
 typedef Il2CppAssembly* (*il2cpp_domain_assembly_open_t)(Il2CppDomain*, const char*);
 typedef Il2CppImage* (*il2cpp_assembly_get_image_t)(Il2CppAssembly*);
@@ -117,65 +96,65 @@ public:
 uintptr_t IL2CPP::base = 0;
 Il2CppImage* IL2CPP::csharpImage = NULL;
 
-#pragma mark - ESP Overlay
-@interface ESPView : UIView
-@property (nonatomic, strong) NSMutableArray<CAShapeLayer*> *boxLayers;
-@property (nonatomic, strong) NSMutableArray<UILabel*> *textLabels;
-@end
+#pragma mark - ESP Overlay (Objective-C)
+static UIView* g_overlayView = nil;
 
-@implementation ESPView
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        self.backgroundColor = [UIColor clearColor];
-        self.userInteractionEnabled = NO;
-        self.boxLayers = [NSMutableArray array];
-        self.textLabels = [NSMutableArray array];
-    }
-    return self;
+static void CreateOverlay() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIWindow* window = UIApplication.sharedApplication.windows.firstObject;
+        if (!window) return;
+        
+        g_overlayView = [[UIView alloc] initWithFrame:window.bounds];
+        g_overlayView.backgroundColor = [UIColor clearColor];
+        g_overlayView.userInteractionEnabled = NO;
+        g_overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [window addSubview:g_overlayView];
+    });
 }
 
-- (void)clearOverlay {
-    for (CAShapeLayer* layer in self.boxLayers) {
-        [layer removeFromSuperlayer];
-    }
-    [self.boxLayers removeAllObjects];
-    
-    for (UILabel* label in self.textLabels) {
-        [label removeFromSuperview];
-    }
-    [self.textLabels removeAllObjects];
+static void ClearOverlay() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!g_overlayView) return;
+        for (UIView* sub in g_overlayView.subviews) {
+            [sub removeFromSuperview];
+        }
+    });
 }
 
-- (void)drawBoxAt:(CGPoint)point width:(CGFloat)w height:(CGFloat)h color:(UIColor*)color {
-    CAShapeLayer* box = [CAShapeLayer layer];
-    box.frame = CGRectMake(point.x - w/2, point.y - h, w, h);
-    box.borderColor = color.CGColor;
-    box.borderWidth = 2.0;
-    box.backgroundColor = [UIColor clearColor].CGColor;
-    [self.layer addSublayer:box];
-    [self.boxLayers addObject:box];
+static void DrawBox(float x, float y, float w, float h, bool isClose) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!g_overlayView) return;
+        
+        CGFloat boxW = w;
+        CGFloat boxH = h;
+        CGRect rect = CGRectMake(x - boxW/2, y - boxH, boxW, boxH);
+        
+        UIView* box = [[UIView alloc] initWithFrame:rect];
+        box.backgroundColor = [UIColor clearColor];
+        box.layer.borderColor = isClose ? [UIColor redColor].CGColor : [UIColor greenColor].CGColor;
+        box.layer.borderWidth = 2.0;
+        [g_overlayView addSubview:box];
+    });
 }
 
-- (void)drawText:(NSString*)text at:(CGPoint)point {
-    UILabel* label = [[UILabel alloc] initWithFrame:CGRectMake(point.x - 25, point.y - 20, 50, 20)];
-    label.text = text;
-    label.textColor = [UIColor whiteColor];
-    label.font = [UIFont systemFontOfSize:12];
-    label.textAlignment = NSTextAlignmentCenter;
-    label.backgroundColor = [UIColor clearColor];
-    [self addSubview:label];
-    [self.textLabels addObject:label];
+static void DrawText(NSString* text, float x, float y) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!g_overlayView) return;
+        
+        UILabel* label = [[UILabel alloc] initWithFrame:CGRectMake(x - 25, y - 20, 50, 20)];
+        label.text = text;
+        label.textColor = [UIColor whiteColor];
+        label.font = [UIFont systemFontOfSize:12];
+        label.textAlignment = NSTextAlignmentCenter;
+        label.backgroundColor = [UIColor clearColor];
+        [g_overlayView addSubview:label];
+    });
 }
-
-@end
 
 #pragma mark - ESP Logic
 class ESP {
 public:
     static bool enabled = true;
-    static ESPView* overlayView;
     
     static constexpr uintptr_t GET_MAIN_CAMERA_RVA = 0x1579AAC;
     static constexpr uintptr_t W2S_RVA = 0x2D5F87C;
@@ -187,22 +166,19 @@ public:
         
         hittableList = IL2CPP::GetStaticField("PlayerSkeleton", "Hittable");
         
-        // Создаём overlay
-        dispatch_async(dispatch_get_main_queue(), ^{
-            UIWindow* keyWindow = [UIApplication sharedApplication].keyWindow;
-            overlayView = [[ESPView alloc] initWithFrame:keyWindow.bounds];
-            overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            [keyWindow addSubview:overlayView];
-        });
+        if (hittableList) {
+            CreateOverlay();
+        }
     }
     
     static void Update() {
-        if (!enabled || !hittableList || !overlayView) return;
+        if (!enabled || !hittableList || !g_overlayView) return;
         
         auto items = Memory::Read<uintptr_t>((uintptr_t)hittableList + 0x10);
         auto size = Memory::Read<int>((uintptr_t)hittableList + 0x18);
+        
         if (!items || size <= 0 || size > 100) {
-            [overlayView clearOverlay];
+            ClearOverlay();
             return;
         }
         
@@ -215,9 +191,7 @@ public:
         float sw = [UIScreen mainScreen].bounds.size.width;
         float sh = [UIScreen mainScreen].bounds.size.height;
         
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [overlayView clearOverlay];
-        });
+        ClearOverlay();
         
         for (int i = 0; i < size; i++) {
             auto skeleton = Memory::Read<uintptr_t>(items + i * 8);
@@ -236,21 +210,13 @@ public:
             
             if (screen.x < 0 || screen.x > sw || screen.y < 0 || screen.y > sh) continue;
             
-            UIColor* color = dist < 50 ? [UIColor redColor] : [UIColor greenColor];
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [overlayView drawBoxAt:CGPointMake(screen.x, screen.y) 
-                                 width:60 
-                                height:120 
-                                 color:color];
-                [overlayView drawText:[NSString stringWithFormat:@"%dm", (int)dist] 
-                                   at:CGPointMake(screen.x, screen.y - 130)];
-            });
+            bool isClose = dist < 50;
+            DrawBox(screen.x, screen.y, 60, 120, isClose);
+            DrawText([NSString stringWithFormat:@"%dm", (int)dist], screen.x, screen.y - 130);
         }
     }
 };
 
-ESPView* ESP::overlayView = NULL;
 void* ESP::hittableList = NULL;
 
 #pragma mark - Entry Point
