@@ -5,6 +5,8 @@
 #include <thread>
 #include <vector>
 #include <Foundation/Foundation.h>
+#include "imgui.h"
+#include "imgui_impl_metal.h"
 
 // --- IL2CPP API ---
 typedef void* (*il2cpp_domain_get_t)();
@@ -38,8 +40,12 @@ void InitIL2CPP() {
     il2cpp_runtime_invoke = (il2cpp_runtime_invoke_t)dlsym(handle, "il2cpp_runtime_invoke");
 }
 
-void ChamsLoop() {
-    sleep(5); // Ждем загрузки игры
+// --- Настройки ---
+bool esp_enabled = true;
+bool chams_enabled = true;
+
+void RenderLoop() {
+    sleep(5); // Ждем загрузки
 
     if (!il2cpp_domain_get || !il2cpp_domain_assembly_open) return;
 
@@ -50,54 +56,31 @@ void ChamsLoop() {
     void* image = il2cpp_assembly_get_image(assembly);
     if (!image) return;
 
-    // 1. Ищем класс PlayerHull (список игроков)
-    void* playerHullClass = il2cpp_class_from_name(image, "", "PlayerHull");
-    if (!playerHullClass) {
-        NSLog(@"[Card0zo] PlayerHull class not found!");
-        return;
-    }
+    // Ищем PlayerSkeleton (ScarletWork.Game)
+    void* playerSkeletonClass = il2cpp_class_from_name(image, "ScarletWork.Game", "PlayerSkeleton");
+    if (!playerSkeletonClass) return;
 
-    // 2. Ищем класс PlayerModel (где лежат рендереры)
-    void* playerModelClass = il2cpp_class_from_name(image, "", "PlayerModel");
-    if (!playerModelClass) {
-        // Пробуем альтернативные названия
-        playerModelClass = il2cpp_class_from_name(image, "", "PlayerSkin");
-        if (!playerModelClass) {
-            playerModelClass = il2cpp_class_from_name(image, "", "PlayerBody");
-        }
-    }
-
-    if (!playerModelClass) {
-        NSLog(@"[Card0zo] PlayerModel/Skin class not found!");
-        return;
-    }
-
-    // 3. Ищем SkinnedMeshRenderer и Material
-    void* skinnedMeshRendererClass = il2cpp_class_from_name(image, "UnityEngine", "SkinnedMeshRenderer");
-    void* materialClass = il2cpp_class_from_name(image, "UnityEngine", "Material");
-    if (!skinnedMeshRendererClass || !materialClass) {
-        NSLog(@"[Card0zo] Unity classes not found!");
-        return;
-    }
-
-    // Ищем метод get_material
-    void* getMaterialMethod = il2cpp_class_get_method_from_name(skinnedMeshRendererClass, "get_material", 0);
-    // Ищем метод set_color
-    void* setColorMethod = il2cpp_class_get_method_from_name(materialClass, "set_color", 1);
-
-    if (!getMaterialMethod || !setColorMethod) {
-        NSLog(@"[Card0zo] Material methods not found!");
-        return;
-    }
-
-    NSLog(@"[Card0zo] Classes found! Starting chams loop...");
+    // Ищем поля
+    void* hittableField = il2cpp_class_get_field_from_name(playerSkeletonClass, "Hittable"); // 0x0
+    void* cachedRenderersField = il2cpp_class_get_field_from_name(playerSkeletonClass, "_cachedRenderers"); // 0x70
+    void* bodyTransformField = il2cpp_class_get_field_from_name(playerSkeletonClass, "_boxTransform"); // 0x20 (в PlayerHull, но попробуем через Skeleton)
 
     while (true) {
-        // Логика покраски
-        // (В этом тесте мы просто выводим в лог, что цикл работает)
-        // В следующем шаге мы добавим реальную покраску.
-        
-        usleep(1000000); // 1 секунда
+        // Цикл отрисовки
+        if (esp_enabled || chams_enabled) {
+            // Здесь должна быть логика прохода по списку Hittable
+            // Пока просто рисуем меню и заглушку ESP в центре
+        }
+
+        // Отрисовка меню
+        ImGui::Begin("Card0zo CounterFlame");
+        ImGui::TextColored(ImVec4(0.6f, 0.2f, 0.8f, 1.0f), "Developer: Card0zo");
+        ImGui::Separator();
+        ImGui::Checkbox("Enable ESP", &esp_enabled);
+        ImGui::Checkbox("Enable Chams", &chams_enabled);
+        ImGui::End();
+
+        usleep(16000); // 60 FPS
     }
 }
 
@@ -108,5 +91,5 @@ void Init() {
     unsetenv("DYLD_LIBRARY_PATH");
 
     InitIL2CPP();
-    std::thread(ChamsLoop).detach();
+    std::thread(RenderLoop).detach();
 }
