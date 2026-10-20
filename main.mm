@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 #include <thread>
 #include <vector>
+#include <Foundation/Foundation.h>
 
 // --- IL2CPP API ---
 typedef void* (*il2cpp_domain_get_t)();
@@ -49,36 +50,54 @@ void ChamsLoop() {
     void* image = il2cpp_assembly_get_image(assembly);
     if (!image) return;
 
-    // 1. Ищем класс PlayerHull
+    // 1. Ищем класс PlayerHull (список игроков)
     void* playerHullClass = il2cpp_class_from_name(image, "", "PlayerHull");
-    if (!playerHullClass) return;
+    if (!playerHullClass) {
+        NSLog(@"[Card0zo] PlayerHull class not found!");
+        return;
+    }
 
-    // 2. Ищем класс PlayerModel (где лежат _renderers)
-    // Нам нужно угадать название, скорее всего это PlayerModel или PlayerSkin
+    // 2. Ищем класс PlayerModel (где лежат рендереры)
     void* playerModelClass = il2cpp_class_from_name(image, "", "PlayerModel");
     if (!playerModelClass) {
+        // Пробуем альтернативные названия
         playerModelClass = il2cpp_class_from_name(image, "", "PlayerSkin");
+        if (!playerModelClass) {
+            playerModelClass = il2cpp_class_from_name(image, "", "PlayerBody");
+        }
     }
-    if (!playerModelClass) return;
+
+    if (!playerModelClass) {
+        NSLog(@"[Card0zo] PlayerModel/Skin class not found!");
+        return;
+    }
 
     // 3. Ищем SkinnedMeshRenderer и Material
     void* skinnedMeshRendererClass = il2cpp_class_from_name(image, "UnityEngine", "SkinnedMeshRenderer");
     void* materialClass = il2cpp_class_from_name(image, "UnityEngine", "Material");
-    if (!skinnedMeshRendererClass || !materialClass) return;
+    if (!skinnedMeshRendererClass || !materialClass) {
+        NSLog(@"[Card0zo] Unity classes not found!");
+        return;
+    }
 
-    // Ищем метод get_material у SkinnedMeshRenderer
+    // Ищем метод get_material
     void* getMaterialMethod = il2cpp_class_get_method_from_name(skinnedMeshRendererClass, "get_material", 0);
-    // Ищем метод set_color у Material
+    // Ищем метод set_color
     void* setColorMethod = il2cpp_class_get_method_from_name(materialClass, "set_color", 1);
 
-    if (!getMaterialMethod || !setColorMethod) return;
+    if (!getMaterialMethod || !setColorMethod) {
+        NSLog(@"[Card0zo] Material methods not found!");
+        return;
+    }
+
+    NSLog(@"[Card0zo] Classes found! Starting chams loop...");
 
     while (true) {
-        // Здесь должен быть цикл по игрокам и вызов getMaterial -> setColor
-        // Но для этого нужно получить список игроков (Active) и их рендереры.
-        // Пока это заглушка, чтобы проверить, что классы находятся.
-
-        usleep(100000); // 100 мс
+        // Логика покраски
+        // (В этом тесте мы просто выводим в лог, что цикл работает)
+        // В следующем шаге мы добавим реальную покраску.
+        
+        usleep(1000000); // 1 секунда
     }
 }
 
