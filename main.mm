@@ -51,10 +51,14 @@ class IL2CPP {
 public:
     static uintptr_t base;
     static Il2CppImage* csharpImage;
+    static NSString* statusText;
     
     static bool Init() {
         base = Memory::GetBase("GameAssembly.dylib");
-        if (!base) return false;
+        if (!base) {
+            statusText = @"GameAssembly NOT FOUND";
+            return false;
+        }
         
         *(void**)&fn_domain_get = dlsym(RTLD_DEFAULT, "il2cpp_domain_get");
         *(void**)&fn_assembly_open = dlsym(RTLD_DEFAULT, "il2cpp_domain_assembly_open");
@@ -64,20 +68,32 @@ public:
         *(void**)&fn_field_static_get = dlsym(RTLD_DEFAULT, "il2cpp_field_static_get_value");
         *(void**)&fn_field_get_name = dlsym(RTLD_DEFAULT, "il2cpp_field_get_name");
         
-        if (!fn_domain_get || !fn_class_from_name) return false;
+        if (!fn_domain_get || !fn_class_from_name) {
+            statusText = @"IL2CPP functions NOT FOUND";
+            return false;
+        }
         
         auto domain = fn_domain_get();
         auto assembly = fn_assembly_open(domain, "Assembly-CSharp");
         csharpImage = fn_get_image(assembly);
         
-        return csharpImage != NULL;
+        if (!csharpImage) {
+            statusText = @"Assembly-CSharp NOT FOUND";
+            return false;
+        }
+        
+        statusText = @"IL2CPP OK";
+        return true;
     }
     
     static void* GetStaticField(const char* className, const char* fieldName) {
         if (!csharpImage) return NULL;
         
         auto cls = fn_class_from_name(csharpImage, "ScarletWork.Game", className);
-        if (!cls) return NULL;
+        if (!cls) {
+            statusText = [NSString stringWithFormat:@"Class %s NOT FOUND", className];
+            return NULL;
+        }
         
         void* iter = NULL;
         Il2CppFieldInfo* field;
@@ -86,18 +102,26 @@ public:
             if (name && strcmp(name, fieldName) == 0) {
                 void* value = NULL;
                 fn_field_static_get(field, &value);
+                if (value) {
+                    statusText = [NSString stringWithFormat:@"Field %s.%s = %p", className, fieldName, value];
+                } else {
+                    statusText = [NSString stringWithFormat:@"Field %s.%s = NULL", className, fieldName];
+                }
                 return value;
             }
         }
+        statusText = [NSString stringWithFormat:@"Field %s NOT FOUND", fieldName];
         return NULL;
     }
 };
 
 uintptr_t IL2CPP::base = 0;
 Il2CppImage* IL2CPP::csharpImage = NULL;
+NSString* IL2CPP::statusText = @"Init...";
 
 #pragma mark - ESP Overlay
 static UIView* g_overlayView = nil;
+static UILabel* g_statusLabel = nil;
 static bool g_espEnabled = true;
 
 static void CreateOverlay() {
@@ -110,6 +134,23 @@ static void CreateOverlay() {
         g_overlayView.userInteractionEnabled = NO;
         g_overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [window addSubview:g_overlayView];
+        
+        // Статус лейбл в левом верхнем углу
+        g_statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 50, 300, 100)];
+        g_statusLabel.textColor = [UIColor yellowColor];
+        g_statusLabel.font = [UIFont systemFontOfSize:14];
+        g_statusLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+        g_statusLabel.numberOfLines = 0;
+        [g_overlayView addSubview:g_statusLabel];
+    });
+}
+
+static void UpdateStatus(NSString* status, int playerCount) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (g_statusLabel) {
+            g_statusLabel.text = [NSString stringWithFormat:@"%@\nPlayers: %d\nBase: 0x%lx", 
+                                  status, playerCount, IL2CPP::base];
+        }
     });
 }
 
@@ -117,7 +158,9 @@ static void ClearOverlay() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!g_overlayView) return;
         for (UIView* sub in g_overlayView.subviews) {
-            [sub removeFromSuperview];
+            if (sub != g_statusLabel) {
+                [sub removeFromSuperview];
+            }
         }
     });
 }
@@ -153,34 +196,66 @@ static void DrawText(NSString* text, float x, float y) {
 class ESP {
 public:
     static void* hittableList;
+    static void* localPlayerInstance;
     
     static constexpr uintptr_t GET_MAIN_CAMERA_RVA = 0x1579AAC;
     static constexpr uintptr_t W2S_RVA = 0x2D5F87C;
+    static constexpr uintptr_t LOCAL_PLAYER_RVA = 0x0; // RVA поля LocalPlayerInstance из PlayerManager
     
     static void Init() {
-        if (!IL2CPP::Init()) return;
+        if (!IL2CPP::Init()) {
+            CreateOverlay();
+            UpdateStatus(IL2CPP::statusText, 0);
+            return;
+        }
         
+        // Пробуем получить Hittable
         hittableList = IL2CPP::GetStaticField("PlayerSkeleton", "Hittable");
         
+        // Пробуем получить LocalPlayerInstance
+        localPlayerInstance = IL2CPP::GetStaticField("PlayerManager", "LocalPlayerInstance");
+        
+        CreateOverlay();
+        
         if (hittableList) {
-            CreateOverlay();
+            UpdateStatus(@"Hittable: OK", 0);
+        } else if (localPlayerInstance) {
+            UpdateStatus(@"LocalPlayer: OK", 0);
+        } else {
+            UpdateStatus(@"No player lists found", 0);
         }
     }
     
     static void Update() {
-        if (!g_espEnabled || !hittableList || !g_overlayView) return;
+        if (!g_espEnabled || !g_overlayView) return;
         
-        auto items = Memory::Read<uintptr_t>((uintptr_t)hittableList + 0x10);
-        auto size = Memory::Read<int>((uintptr_t)hittableList + 0x18);
-        
-        if (!items || size <= 0 || size > 100) {
-            ClearOverlay();
-            return;
+        // Пробуем Hittable
+        if (hittableList) {
+            auto items = Memory::Read<uintptr_t>((uintptr_t)hittableList + 0x10);
+            auto size = Memory::Read<int>((uintptr_t)hittableList + 0x18);
+            
+            if (items && size > 0 && size <= 100) {
+                RenderPlayers(items, size);
+                UpdateStatus(IL2CPP::statusText, size);
+                return;
+            }
         }
         
+        // Если Hittable не работает, пробуем через LocalPlayer
+        if (localPlayerInstance) {
+            UpdateStatus(@"LocalPlayer found, but no enemy list", 0);
+        }
+        
+        ClearOverlay();
+    }
+    
+    static void RenderPlayers(uintptr_t items, int size) {
         auto getCamera = (uintptr_t(*)(void))(IL2CPP::base + GET_MAIN_CAMERA_RVA);
         auto camera = getCamera();
-        if (!camera) return;
+        if (!camera) {
+            UpdateStatus(@"Camera: NULL", size);
+            return;
+        }
         
         auto w2s = (Vector2(*)(uintptr_t, Vector3))(IL2CPP::base + W2S_RVA);
         
@@ -189,6 +264,7 @@ public:
         
         ClearOverlay();
         
+        int drawnCount = 0;
         for (int i = 0; i < size; i++) {
             auto skeleton = Memory::Read<uintptr_t>(items + i * 8);
             if (!skeleton) continue;
@@ -209,11 +285,15 @@ public:
             bool isClose = dist < 50;
             DrawBox(screen.x, screen.y, 60, 120, isClose);
             DrawText([NSString stringWithFormat:@"%dm", (int)dist], screen.x, screen.y - 130);
+            drawnCount++;
         }
+        
+        UpdateStatus([NSString stringWithFormat:@"Drawn: %d/%d", drawnCount, size], size);
     }
 };
 
 void* ESP::hittableList = NULL;
+void* ESP::localPlayerInstance = NULL;
 
 #pragma mark - Entry Point
 __attribute__((constructor))
