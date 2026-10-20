@@ -17,6 +17,12 @@ jobs:
         curl -L https://github.com/ocornut/imgui/archive/refs/heads/master.zip -o imgui.zip
         unzip -q imgui.zip
         mv imgui-master ImGui
+    - name: Download Titanox
+      run: |
+        curl -L https://github.com/Ragekill3377/Titanox/archive/refs/heads/main.zip -o titanox.zip
+        unzip -q titanox.zip
+        mkdir -p libtitanox
+        cp -R Titanox-main/* libtitanox/
     - name: Build
       run: make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
     - name: Upload
