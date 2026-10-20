@@ -9,6 +9,7 @@ LIBRARY_NAME = Card0zoESP
 
 Card0zoESP_FILES = main.mm
 Card0zoESP_CFLAGS = -fobjc-arc
-Card0zoESP_FRAMEWORKS = UIKit Foundation
+Card0zoESP_FRAMEWORKS = UIKit Foundation AudioToolbox
+Card0zoESP_LDFLAGS = -lstdc++
 
 include $(THEOS_MAKE_PATH)/library.mk
