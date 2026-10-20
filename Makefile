@@ -1,6 +1,5 @@
 export TARGET = iphone:clang:latest:14.0
 export ARCHS = arm64
-
 export ADDITIONAL_CCFLAGS = -std=c++17 -Wno-error=unused-variable
 
 INSTALL_TARGET_PROCESSES = CounterFlame
