@@ -96,8 +96,9 @@ public:
 uintptr_t IL2CPP::base = 0;
 Il2CppImage* IL2CPP::csharpImage = NULL;
 
-#pragma mark - ESP Overlay (Objective-C)
+#pragma mark - ESP Overlay
 static UIView* g_overlayView = nil;
+static bool g_espEnabled = true;
 
 static void CreateOverlay() {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -125,10 +126,7 @@ static void DrawBox(float x, float y, float w, float h, bool isClose) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!g_overlayView) return;
         
-        CGFloat boxW = w;
-        CGFloat boxH = h;
-        CGRect rect = CGRectMake(x - boxW/2, y - boxH, boxW, boxH);
-        
+        CGRect rect = CGRectMake(x - w/2, y - h, w, h);
         UIView* box = [[UIView alloc] initWithFrame:rect];
         box.backgroundColor = [UIColor clearColor];
         box.layer.borderColor = isClose ? [UIColor redColor].CGColor : [UIColor greenColor].CGColor;
@@ -154,12 +152,10 @@ static void DrawText(NSString* text, float x, float y) {
 #pragma mark - ESP Logic
 class ESP {
 public:
-    static bool enabled = true;
+    static void* hittableList;
     
     static constexpr uintptr_t GET_MAIN_CAMERA_RVA = 0x1579AAC;
     static constexpr uintptr_t W2S_RVA = 0x2D5F87C;
-    
-    static void* hittableList;
     
     static void Init() {
         if (!IL2CPP::Init()) return;
@@ -172,7 +168,7 @@ public:
     }
     
     static void Update() {
-        if (!enabled || !hittableList || !g_overlayView) return;
+        if (!g_espEnabled || !hittableList || !g_overlayView) return;
         
         auto items = Memory::Read<uintptr_t>((uintptr_t)hittableList + 0x10);
         auto size = Memory::Read<int>((uintptr_t)hittableList + 0x18);
