@@ -7,7 +7,7 @@ on:
 
 jobs:
   analyze:
-    runs-on: macos-15
+    runs-on: macos-15 # <-- Убедись, что тут 15, а не 14
 
     steps:
     - name: Checkout repository
@@ -15,18 +15,17 @@ jobs:
 
     - name: Analyze binary
       run: |
-        # Ищем файл libloader в корне или папках
         BIN=$(find . -name "libloader" -type f | head -n 1)
         echo "Analyzing: $BIN"
         
-        # Смотрим заголовок Mach-O и архитектуру
-        file "$BIN"
+        # Смотрим, какие библиотеки он грузит (зависимости)
+        echo "=== Linked Libraries ==="
+        otool -L "$BIN"
         
-        # Вытаскиваем все импортируемые символы (функции)
-        # otool -L показывает зависимости, nm -u показывает undefined symbols (то, что он вызывает)
-        echo "=== Undefined Symbols (Imports) ==="
-        nm -u "$BIN" | sort
+        # Вытаскиваем все импортируемые символы, даже если nm не видит
+        echo "=== Dyld Info ==="
+        otool -Iv "$BIN" | head -n 200
         
-        # Ищем конкретно системные вызовы для чтения памяти и отладки
+        # Ищем конкретно системные вызовы (добавил || true, чтобы не падало)
         echo "=== Suspicious Calls ==="
-        nm -u "$BIN" | grep -iE "sysctl|ptrace|mach_vm|vm_|dyld|task_|csops"
+        otool -Iv "$BIN" | grep -iE "sysctl|ptrace|mach_vm|vm_|dyld|task_|csops" || echo "Nothing found"
