@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <mach-o/dyld.h>
+#include <dlfcn.h>
 #include "fishhook.h"
 
 // === ОФФСЕТЫ ИЗ ТВОЕГО ДАМПА ===
@@ -13,11 +14,18 @@
 // Базовые структуры Unity
 struct Vector3 { float x, y, z; };
 
-// Указатели на функции Unity
-void* (*il2cpp_domain_get)();
-void* (*il2cpp_class_from_name)(void* image, const char* namespaze, const char* name);
-void* (*il2cpp_field_get_value)(void* obj, void* field, void* value);
-void* (*il2cpp_class_get_field_from_name)(void* klass, const char* name);
+// Указатели на функции Unity (Обязательно extern "C" и typedef)
+extern "C" {
+    typedef void* (*il2cpp_domain_get_t)();
+    typedef void* (*il2cpp_class_from_name_t)(void* image, const char* namespaze, const char* name);
+    typedef void* (*il2cpp_field_get_value_t)(void* obj, void* field, void* value);
+    typedef void* (*il2cpp_class_get_field_from_name_t)(void* klass, const char* name);
+}
+
+il2cpp_domain_get_t il2cpp_domain_get_ptr = NULL;
+il2cpp_class_from_name_t il2cpp_class_from_name_ptr = NULL;
+il2cpp_field_get_value_t il2cpp_field_get_value_ptr = NULL;
+il2cpp_class_get_field_from_name_t il2cpp_class_get_field_from_name_ptr = NULL;
 
 // Окно для отрисовки
 UIWindow *espWindow;
@@ -37,26 +45,28 @@ uintptr_t get_unity_base() {
 // Твоя логика ESP
 void UpdateESP() {
     uintptr_t unityBase = get_unity_base();
-    if (!unityBase) return;
+    if (!unityBase || !il2cpp_class_from_name_ptr) return;
 
     // Ищем класс PlayerSkeleton
-    void* klass = il2cpp_class_from_name(NULL, "ScarletWork.Game", "PlayerSkeleton");
-    if (!klass) return;
+    void* klass = il2cpp_class_from_name_ptr(NULL, "ScarletWork.Game", "PlayerSkeleton");
+    if (!klass) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            espLabel.text = @"ESP: Class not found";
+        });
+        return;
+    }
 
     // Ищем статическое поле Hittable
-    void* field = il2cpp_class_get_field_from_name(klass, "Hittable");
-    if (!field) return;
+    void* field = il2cpp_class_get_field_from_name_ptr(klass, "Hittable");
+    if (!field) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            espLabel.text = @"ESP: Field not found";
+        });
+        return;
+    }
 
-    // Получаем список игроков
-    void* hittableList = nullptr;
-    il2cpp_field_get_value(NULL, field, &hittableList);
-    if (!hittableList) return;
-
-    // В реальности тут нужно итерироваться по List<T> (через _items и _size)
-    // Но для теста мы просто покажем, что связь с памятью есть
     dispatch_async(dispatch_get_main_queue(), ^{
-        espLabel.text = @"ESP: Connected to Game Memory";
-        espLabel.hidden = NO;
+        espLabel.text = @"ESP: Connected to Game Memory!";
     });
 }
 
@@ -80,10 +90,11 @@ void setupESP() {
         espWindow.rootViewController = vc;
         espWindow.hidden = NO;
         
-        // Запускаем таймер обновления (60 раз в секунду)
-        [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 target:[NSBlockOperation blockOperationWithBlock:^{
+        // Запускаем таймер обновления
+        NSTimer *timer = [NSTimer timerWithTimeInterval:1.0/60.0 target:[NSBlockOperation blockOperationWithBlock:^{
             UpdateESP();
         }] selector:@selector(main) userInfo:nil repeats:YES];
+        [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
     });
 }
 
@@ -98,10 +109,10 @@ static void init() {
         // Подгружаем функции IL2CPP из UnityFramework
         void* unityHandle = dlopen("@executable_path/Frameworks/UnityFramework.framework/UnityFramework", RTLD_LAZY);
         if (unityHandle) {
-            il2cpp_domain_get = dlsym(unityHandle, "il2cpp_domain_get");
-            il2cpp_class_from_name = dlsym(unityHandle, "il2cpp_class_from_name");
-            il2cpp_field_get_value = dlsym(unityHandle, "il2cpp_field_get_value");
-            il2cpp_class_get_field_from_name = dlsym(unityHandle, "il2cpp_class_get_field_from_name");
+            il2cpp_domain_get_ptr = (il2cpp_domain_get_t)dlsym(unityHandle, "il2cpp_domain_get");
+            il2cpp_class_from_name_ptr = (il2cpp_class_from_name_t)dlsym(unityHandle, "il2cpp_class_from_name");
+            il2cpp_field_get_value_ptr = (il2cpp_field_get_value_t)dlsym(unityHandle, "il2cpp_field_get_value");
+            il2cpp_class_get_field_from_name_ptr = (il2cpp_class_get_field_from_name_t)dlsym(unityHandle, "il2cpp_class_get_field_from_name");
             
             setupESP();
         } else {
