@@ -9,6 +9,6 @@ Card0zoEsp_FILES = main.mm
 Card0zoEsp_CFLAGS = -fobjc-arc -I./fishhook
 Card0zoEsp_FRAMEWORKS = UIKit Foundation
 Card0zoEsp_LIBRARIES = substrate
-Card0zoEsp_LDFLAGS = -undefined dynamic_lookup
+Card0zoEsp_LDFLAGS = -undefined dynamic_lookup -Wl,-not_for_dyld_shared_cache
 
 include $(THEOS_MAKE_PATH)/library.mk
