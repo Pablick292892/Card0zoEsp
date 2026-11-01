@@ -1,60 +1,73 @@
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <mach-o/dyld.h>
 #import <mach-o/loader.h>
 #import <dlfcn.h>
 #import <mach/mach.h>
 #import "fishhook/fishhook.h"
 
-// Оригинальные функции
-static kern_return_t (*orig_mach_vm_read_overwrite)(vm_map_t, vm_address_t, vm_size_t, vm_address_t, vm_size_t *);
-static const struct mach_header_64* (*orig_dyld_get_image_header)(uint32_t);
+// Глобальные переменные для UI
+static UIWindow *logWindow;
+static UITextView *logTextView;
 
-// 1. Патчим заголовок, чтобы cryptid был 1
-static const struct mach_header_64* fake_get_image_header(uint32_t index) {
-    const struct mach_header_64* header = orig_dyld_get_image_header(index);
-    if (header && index == 0) {
-        struct mach_header_64 *h64 = (struct mach_header_64 *)header;
-        const struct load_command *cmd = (const struct load_command *)(h64 + 1);
-        for (uint32_t i = 0; i < h64->ncmds; i++) {
-            if (cmd->cmd == LC_ENCRYPTION_INFO_64) {
-                struct encryption_info_command_64 *info = (struct encryption_info_command_64 *)cmd;
-                if (info->cryptid == 0) {
-                    vm_protect(mach_task_self(), (vm_address_t)info, sizeof(*info), false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-                    info->cryptid = 1;
-                }
-            }
-            cmd = (const struct load_command *)((uint8_t *)cmd + cmd->cmdsize);
-        }
-    }
-    return header;
+static void addLog(NSString *text) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!logTextView) return;
+        logTextView.text = [NSString stringWithFormat:@"%@\n%@", logTextView.text, text];
+        // Автоскролл вниз
+        NSRange range = NSMakeRange(logTextView.text.length - 1, 1);
+        [logTextView scrollRangeToVisible:range];
+    });
 }
 
-// 2. Хукаем чтение памяти (mach_vm_read_overwrite)
+// Оригинальные функции
+static kern_return_t (*orig_mach_vm_read_overwrite)(vm_map_t, vm_address_t, vm_size_t, vm_address_t, vm_size_t *);
+static kern_return_t (*orig_mach_vm_read)(vm_map_t, vm_address_t, vm_size_t, vm_offset_t *, vm_size_t *);
+
+// Хук для mach_vm_read_overwrite
 static kern_return_t fake_mach_vm_read_overwrite(vm_map_t target_task, vm_address_t address, vm_size_t size, vm_address_t data, vm_size_t *outsize) {
-    // Возвращаем ошибку, чтобы античит думал, что память недоступна
-    if (outsize) *outsize = 0;
-    return KERN_INVALID_ADDRESS; 
+    // Логируем адрес и размер
+    addLog([NSString stringWithFormat:@"R_OVERW: %p (size %zu)", (void*)address, size]);
+    
+    // Пропускаем настоящий вызов, чтобы игра не крашилась
+    return orig_mach_vm_read_overwrite(target_task, address, size, data, outsize);
+}
+
+// Хук для mach_vm_read
+static kern_return_t fake_mach_vm_read(vm_map_t target_task, vm_address_t address, vm_size_t size, vm_offset_t *data, vm_size_t *outsize) {
+    addLog([NSString stringWithFormat:@"R_READ: %p (size %zu)", (void*)address, size]);
+    return orig_mach_vm_read(target_task, address, size, data, outsize);
 }
 
 __attribute__((constructor))
 static void init_hooks(void) {
-    // Приводим типы явно, чтобы C++ не ругался
-    orig_dyld_get_image_header = (const struct mach_header_64*(*)(uint32_t))dlsym(RTLD_DEFAULT, "_dyld_get_image_header");
-    
-    if (orig_dyld_get_image_header) {
-        fake_get_image_header(0);
-    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Настраиваем окно
+        logWindow = [[UIWindow alloc] initWithFrame:CGRectMake(10, 50, 350, 250)];
+        logWindow.windowLevel = UIWindowLevelAlert + 1;
+        logWindow.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
+        
+        logTextView = [[UITextView alloc] initWithFrame:logWindow.bounds];
+        logTextView.backgroundColor = [UIColor clearColor];
+        logTextView.textColor = [UIColor greenColor];
+        logTextView.font = [UIFont fontWithName:@"Courier" size:10];
+        logTextView.editable = NO;
+        logTextView.text = @"[TK-TEST] Логгер памяти запущен...";
+        
+        [logWindow addSubview:logTextView];
+        logWindow.hidden = NO;
+        
+        // Ставим хуки
+        struct rebinding rebinds[2];
+        
+        rebinds[0].name = "mach_vm_read_overwrite";
+        rebinds[0].replacement = (void *)fake_mach_vm_read_overwrite;
+        rebinds[0].replaced = (void **)&orig_mach_vm_read_overwrite;
 
-    // Хукаем чтение памяти через fishhook
-    struct rebinding rebinds[2];
-    
-    rebinds[0].name = "mach_vm_read_overwrite";
-    rebinds[0].replacement = (void *)fake_mach_vm_read_overwrite;
-    rebinds[0].replaced = (void **)&orig_mach_vm_read_overwrite;
+        rebinds[1].name = "mach_vm_read";
+        rebinds[1].replacement = (void *)fake_mach_vm_read;
+        rebinds[1].replaced = (void **)&orig_mach_vm_read;
 
-    rebinds[1].name = "_dyld_get_image_header";
-    rebinds[1].replacement = (void *)fake_get_image_header;
-    rebinds[1].replaced = (void **)&orig_dyld_get_image_header;
-
-    rebind_symbols(rebinds, 2);
+        rebind_symbols(rebinds, 2);
+    });
 }
