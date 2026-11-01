@@ -17,15 +17,20 @@ il2cpp_class_get_field_from_name_t il2cpp_class_get_field_from_name_ptr = NULL;
 
 UIWindow *espWindow;
 UILabel *espLabel;
-void* gameImage = NULL; // Указатель на нашу сборку с классами
+void* gameImage = NULL;
 
-void UpdateESP() {
-    if (!gameImage) {
-        dispatch_async(dispatch_get_main_queue(), ^{ espLabel.text = @"ESP: Image not found"; });
+// Класс для таймера, чтобы избежать проблем с блоками
+@interface ESPUpdater : NSObject
+- (void)tick;
+@end
+
+@implementation ESPUpdater
+- (void)tick {
+    if (!gameImage || !il2cpp_class_from_name_ptr) {
+        dispatch_async(dispatch_get_main_queue(), ^{ espLabel.text = @"ESP: Image or Ptr NULL"; });
         return;
     }
 
-    // Теперь передаем правильный gameImage
     void* klass = il2cpp_class_from_name_ptr(gameImage, "ScarletWork.Game", "PlayerSkeleton");
     if (!klass) {
         dispatch_async(dispatch_get_main_queue(), ^{ espLabel.text = @"ESP: Class not found"; });
@@ -38,11 +43,13 @@ void UpdateESP() {
         return;
     }
 
+    // Всё нашли!
     dispatch_async(dispatch_get_main_queue(), ^{
         espLabel.text = @"ESP: Memory READ OK!";
         espLabel.textColor = [UIColor cyanColor]; 
     });
 }
+@end
 
 __attribute__((constructor))
 static void init() {
@@ -78,7 +85,6 @@ static void init() {
             il2cpp_class_get_field_from_name_ptr = (il2cpp_class_get_field_from_name_t)dlsym(unityHandle, "il2cpp_class_get_field_from_name");
             
             if (il2cpp_domain_get_ptr && il2cpp_domain_get_assemblies_ptr && il2cpp_assembly_get_image_ptr) {
-                // Ищем сборку Assembly-CSharp
                 void* domain = il2cpp_domain_get_ptr();
                 size_t assemblyCount = 0;
                 void** assemblies = il2cpp_domain_get_assemblies_ptr(domain, &assemblyCount);
@@ -89,7 +95,7 @@ static void init() {
                         if (image) {
                             void* testClass = il2cpp_class_from_name_ptr(image, "ScarletWork.Game", "PlayerSkeleton");
                             if (testClass) {
-                                gameImage = image; // Нашли нужную сборку!
+                                gameImage = image; // Нашли!
                                 break;
                             }
                         }
@@ -101,12 +107,8 @@ static void init() {
             return;
         }
 
-        // 3. Цикл обновления
-        __block void (^loop)(void);
-        loop = ^{
-            UpdateESP();
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), loop);
-        };
-        loop();
+        // 3. Запускаем безопасный таймер
+        ESPUpdater *updater = [[ESPUpdater alloc] init];
+        [NSTimer scheduledTimerWithTimeInterval:1.0 target:updater selector:@selector(tick) userInfo:nil repeats:YES];
     });
 }
