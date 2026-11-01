@@ -2,8 +2,8 @@
 #import <UIKit/UIKit.h>
 #import <mach-o/dyld.h>
 #import <mach-o/loader.h>
-#import <mach/vm_protect.h>
 #import <dlfcn.h>
+#import <mach/mach.h>
 
 // Глобальные переменные для UI
 static UIWindow *logWindow;
