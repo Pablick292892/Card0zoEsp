@@ -3,7 +3,6 @@
 #import <QuartzCore/QuartzCore.h>
 #include <dlfcn.h>
 
-// Оффсеты из твоего дампа
 #define OFF_PLAYER_HULL_TRANSFORM 0x20
 
 typedef void* (*il2cpp_domain_get_t)();
@@ -26,9 +25,9 @@ il2cpp_runtime_invoke_t il2cpp_runtime_invoke_ptr = NULL;
 
 UIWindow *espWindow;
 UIView *drawView;
+UILabel *debugLabel;
 void* gameImage = NULL;
 
-// Unity Vector3
 struct Vector3 { float x, y, z; };
 
 @interface ESPRenderer : NSObject
@@ -47,89 +46,101 @@ struct Vector3 { float x, y, z; };
 
 - (void)render {
     for (CALayer *layer in drawView.layer.sublayers) { [layer removeFromSuperlayer]; }
-    if (!gameImage || !il2cpp_class_from_name_ptr) return;
+    if (!gameImage) return;
 
-    // 1. Находим камеру
-    void* cameraClass = il2cpp_class_from_name_ptr(gameImage, "UnityEngine", "Camera");
-    if (!cameraClass) return;
+    NSMutableString *debugText = [NSMutableString string];
     
+    // 1. Камера
+    void* cameraClass = il2cpp_class_from_name_ptr(gameImage, "UnityEngine", "Camera");
     void* mainCamField = il2cpp_class_get_field_from_name_ptr(cameraClass, "main");
     void* cameraObj = NULL;
     if (mainCamField) il2cpp_field_get_value_ptr(NULL, mainCamField, &cameraObj);
-    if (!cameraObj) return;
-
     void* w2sMethod = il2cpp_class_get_method_from_name_ptr(cameraClass, "WorldToScreenPoint", 1);
+    
+    [debugText appendFormat:@"Cam: %@\n", cameraObj ? @"OK" : @"NULL"];
 
-    // 2. Находим игроков
+    // 2. Игроки
+    // В дампе PlayerHull без namespace, поэтому передаем пустую строку ""
     void* hullClass = il2cpp_class_from_name_ptr(gameImage, "", "PlayerHull");
-    if (!hullClass) return;
-
+    if (!hullClass) hullClass = il2cpp_class_from_name_ptr(gameImage, "ScarletWork.Game", "PlayerHull");
+    
     void* activeField = il2cpp_class_get_field_from_name_ptr(hullClass, "Active");
     void* listObj = NULL;
     if (activeField) il2cpp_field_get_value_ptr(NULL, activeField, &listObj);
-    if (!listObj) return;
-
-    void* listClass = *(void**)listObj;
-    void* itemsField = il2cpp_class_get_field_from_name_ptr(listClass, "_items");
-    void* sizeField = il2cpp_class_get_field_from_name_ptr(listClass, "_size");
     
-    void* itemsArray = NULL;
-    int size = 0;
-    if (itemsField) il2cpp_field_get_value_ptr(listObj, itemsField, &itemsArray);
-    if (sizeField) il2cpp_field_get_value_ptr(listObj, sizeField, &size);
-
-    if (!itemsArray || size <= 0) return;
-
-    void** players = (void**)((uintptr_t)itemsArray + 0x20); 
-
-    for (int i = 0; i < size; i++) {
-        void* player = players[i];
-        if (!player) continue;
-
-        void* transform = *(void**)((uintptr_t)player + OFF_PLAYER_HULL_TRANSFORM);
-        if (!transform) continue;
-
-        // Получаем позицию игрока (через Transform.get_position)
-        void* transformClass = *(void**)transform;
-        void* getPosMethod = il2cpp_class_get_method_from_name_ptr(transformClass, "get_position", 0);
-        if (!getPosMethod) continue;
-
-        void* exc = NULL;
-        Vector3* posPtr = (Vector3*)il2cpp_runtime_invoke_ptr(getPosMethod, transform, NULL, &exc);
-        if (!posPtr || exc) continue;
+    if (!listObj) {
+        debugText = [@"Hull list NULL" mutableCopy];
+    } else {
+        void* listClass = *(void**)listObj;
+        void* itemsField = il2cpp_class_get_field_from_name_ptr(listClass, "_items");
+        void* sizeField = il2cpp_class_get_field_from_name_ptr(listClass, "_size");
         
-        Vector3 worldPos = *posPtr;
-        free(posPtr); // Очищаем память
+        void* itemsArray = NULL;
+        int size = 0;
+        if (itemsField) il2cpp_field_get_value_ptr(listObj, itemsField, &itemsArray);
+        if (sizeField) il2cpp_field_get_value_ptr(listObj, sizeField, &size);
 
-        // Переводим в экран
-        if (w2sMethod) {
-            void* w2sParams[1] = { &worldPos };
-            void* w2sExc = NULL;
-            Vector3* screenPosPtr = (Vector3*)il2cpp_runtime_invoke_ptr(w2sMethod, cameraObj, w2sParams, &w2sExc);
-            
-            if (screenPosPtr && !w2sExc && screenPosPtr->z > 0) { // z > 0 значит впереди нас
-                Vector3 screenPos = *screenPosPtr;
-                free(screenPosPtr);
+        [debugText appendFormat:@"List Size: %d\n", size];
+        [debugText appendFormat:@"Array: %@\n", itemsArray ? @"OK" : @"NULL"];
 
-                // Инверсия Y для iOS
-                float screenX = screenPos.x;
-                float screenY = [UIScreen mainScreen].bounds.size.height - screenPos.y;
+        if (itemsArray && size > 0) {
+            void** players = (void**)((uintptr_t)itemsArray + 0x20); 
+            for (int i = 0; i < size; i++) {
+                void* player = players[i];
+                if (!player) continue;
 
-                if (screenX > 0 && screenX < [UIScreen mainScreen].bounds.size.width &&
-                    screenY > 0 && screenY < [UIScreen mainScreen].bounds.size.height) {
+                void* transform = *(void**)((uintptr_t)player + OFF_PLAYER_HULL_TRANSFORM);
+                if (!transform) {
+                    [debugText appendFormat:@"P%d: No Trans\n", i];
+                    continue;
+                }
+
+                void* transformClass = *(void**)transform;
+                void* getPosMethod = il2cpp_class_get_method_from_name_ptr(transformClass, "get_position", 0);
+                if (!getPosMethod) continue;
+
+                void* exc = NULL;
+                Vector3* posPtr = (Vector3*)il2cpp_runtime_invoke_ptr(getPosMethod, transform, NULL, &exc);
+                if (!posPtr || exc) continue;
+                
+                Vector3 worldPos = *posPtr;
+                free(posPtr);
+
+                if (w2sMethod && cameraObj) {
+                    void* w2sParams[1] = { &worldPos };
+                    void* w2sExc = NULL;
+                    Vector3* screenPosPtr = (Vector3*)il2cpp_runtime_invoke_ptr(w2sMethod, cameraObj, w2sParams, &w2sExc);
                     
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        CAShapeLayer *box = [CAShapeLayer layer];
-                        box.path = [UIBezierPath bezierPathWithRect:CGRectMake(screenX - 30, screenY - 80, 60, 120)].CGPath;
-                        box.fillColor = [UIColor clearColor].CGColor;
-                        box.strokeColor = [UIColor redColor].CGColor;
-                        box.lineWidth = 2.0;
-                        [drawView.layer addSublayer:box];
-                    });
+                    if (screenPosPtr && !w2sExc) {
+                        Vector3 screenPos = *screenPosPtr;
+                        free(screenPosPtr);
+
+                        float screenX = screenPos.x;
+                        float screenY = [UIScreen mainScreen].bounds.size.height - screenPos.y;
+                        
+                        [debugText appendFormat:@"P%d: %.0f,%.0f (z%.0f)\n", i, screenX, screenY, screenPos.z];
+
+                        if (screenPos.z > 0 && screenX > 0 && screenX < [UIScreen mainScreen].bounds.size.width &&
+                            screenY > 0 && screenY < [UIScreen mainScreen].bounds.size.height) {
+                            
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                CAShapeLayer *box = [CAShapeLayer layer];
+                                box.path = [UIBezierPath bezierPathWithRect:CGRectMake(screenX - 30, screenY - 80, 60, 120)].CGPath;
+                                box.fillColor = [UIColor clearColor].CGColor;
+                                box.strokeColor = [UIColor redColor].CGColor;
+                                box.lineWidth = 2.0;
+                                [drawView.layer addSublayer:box];
+                            });
+                        }
+                    }
                 }
             }
         }
     }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        debugLabel.text = debugText;
+    });
 }
 @end
 
@@ -150,6 +161,12 @@ static void init() {
         drawView.backgroundColor = [UIColor clearColor];
         drawView.userInteractionEnabled = NO;
         [vc.view addSubview:drawView];
+        
+        debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, 300, 300)];
+        debugLabel.numberOfLines = 0;
+        debugLabel.textColor = [UIColor greenColor];
+        debugLabel.font = [UIFont systemFontOfSize:12];
+        [vc.view addSubview:debugLabel];
         
         espWindow.rootViewController = vc;
         espWindow.hidden = NO;
