@@ -1,0 +1,32 @@
+name: Analyze libloader
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Analyze binary
+      run: |
+        # Ищем файл libloader в корне или папках
+        BIN=$(find . -name "libloader" -type f | head -n 1)
+        echo "Analyzing: $BIN"
+        
+        # Смотрим заголовок Mach-O и архитектуру
+        file "$BIN"
+        
+        # Вытаскиваем все импортируемые символы (функции)
+        # otool -L показывает зависимости, nm -u показывает undefined symbols (то, что он вызывает)
+        echo "=== Undefined Symbols (Imports) ==="
+        nm -u "$BIN" | sort
+        
+        # Ищем конкретно системные вызовы для чтения памяти и отладки
+        echo "=== Suspicious Calls ==="
+        nm -u "$BIN" | grep -iE "sysctl|ptrace|mach_vm|vm_|dyld|task_|csops"
