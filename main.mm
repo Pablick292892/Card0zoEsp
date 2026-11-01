@@ -5,6 +5,9 @@
 #import <dlfcn.h>
 #import <mach/mach.h>
 
+// Отключаем ошибку неиспользуемой функции
+#pragma clang diagnostic ignored "-Wunused-function"
+
 static UIWindow *logWindow;
 static UITextView *logTextView;
 static BOOL keepRunning = YES;
