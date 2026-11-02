@@ -1,4 +1,4 @@
-name: Decompile Libloader
+name: Decompile to C++
 
 on:
   push:
@@ -16,12 +16,19 @@ jobs:
       run: |
         brew install retdec
 
-    - name: Decompile
+    - name: Decompile Chunk
       run: |
-        retdec-decompiler --output decompiled.c libloader || echo "Decompilation failed"
+        # Вырезаем кусок файла с 0x4100 по 0x5000
+        # 0x4100 = 16640 в десятичной
+        # 0x5000 = 20480 в десятичной
+        # Берем 3840 байт
+        dd if=libloader of=chunk.bin bs=1 skip=16640 count=3840
+        
+        # Декомпилируем этот кусок в C++
+        retdec-decompiler --output decompiled_chunk.c chunk.bin || echo "Failed"
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: decompiled-code
-        path: decompiled.c
+        name: decompiled-cpp
+        path: decompiled_chunk.c
