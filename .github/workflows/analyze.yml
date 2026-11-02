@@ -1,0 +1,31 @@
+name: Deep Analyze libloader
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: macos-15
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Analyze binary
+      run: |
+        BIN=$(find . -name "libloader" -type f | head -n 1)
+        echo "Analyzing: $BIN"
+        
+        # 1. Какие функции он импортирует (что вызывает из системы)
+        echo "=== Imports (Что он дергает) ==="
+        nm -u "$BIN" | sort
+        
+        # 2. Ищем конкретные подозрительные вызовы
+        echo "=== Suspicious Calls ==="
+        nm -u "$BIN" | grep -iE "sysctl|ptrace|mach_vm|vm_|dyld|task_|csops|SecItem|DCAppAttest" || echo "Nothing found"
+        
+        # 3. Ищем строки (вдруг что-то не зашифровано)
+        echo "=== Strings (Тексты) ==="
+        strings "$BIN" | grep -iE "crypt|fairplay|simulator|jailbreak|debug|integrity|checksum" | head -n 50
