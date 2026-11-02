@@ -1,4 +1,4 @@
-name: Dump Hex at Address
+name: Full Hex Dump
 
 on:
   push:
@@ -12,22 +12,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Find and Dump
+    - name: Hex Dump
       run: |
-        # Нам нужно найти, где в файле начинается сегмент кода (__TEXT).
-        # В Mach-O обычно смещение __TEXT начинается с 0x4000 (или другого выравнивания).
-        # Но проще: мы найдем байты, которые соответствуют инструкции 'sub w9, w22, #0x28' (которая идет прямо перед нашей).
-        # Инструкция 'sub w9, w22, #0x28' = 0x5100b2a9 (в little-endian: a9 b2 00 51)
-        
-        echo "=== Ищем a9 b2 00 51 (sub w9, w22, #0x28) ==="
-        xxd -p libloader | tr -d '\n' | grep -o -b "a9b20051" | head -n 5
-        
-        echo "=== Вытаскиваем 32 байта после найденного места ==="
-        # (Тут мы просто выведем hex-дамп, чтобы посмотреть вручную)
-        xxd -s 0x4470 -l 32 libloader
+        # Переводим весь файл в HEX-формат (текстом) и сохраняем
+        xxd libloader > full_hex.txt
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: hex-dump
-        path: .
+        name: hex-dump-file
+        path: full_hex.txt
