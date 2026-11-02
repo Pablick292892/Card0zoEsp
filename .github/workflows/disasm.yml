@@ -1,4 +1,4 @@
-name: Full Hex Dump
+name: Extract Raw Bytes
 
 on:
   push:
@@ -6,19 +6,29 @@ on:
   workflow_dispatch:
 
 jobs:
-  dump:
-    runs-on: ubuntu-latest
+  extract:
+    runs-on: macos-14
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Hex Dump
+    - name: Extract
       run: |
-        # Переводим весь файл в HEX-формат (текстом) и сохраняем
-        xxd libloader > full_hex.txt
+        # otool -l показывает структуру сегментов (где начинается код)
+        otool -l libloader | grep -A 3 "__TEXT" | head -n 10 > text_info.txt
+        
+        # Вытаскиваем сырые байты из файла начиная с 0x4000 (обычно там код) 
+        # и ищем в них нашу последовательность
+        echo "=== Searching raw HEX for our function ===" > raw_hex.txt
+        # 0x0447c - это виртуальный адрес. Обычно он совпадает с физическим, если вычесть 0x4000.
+        # Давай просто выведем 100 байт начиная с 0x4000 и 100 байт с 0x0000
+        xxd -s 0x4000 -l 100 libloader >> raw_hex.txt
+        xxd -s 0x0000 -l 100 libloader >> raw_hex.txt
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: hex-dump-file
-        path: full_hex.txt
+        name: raw-bytes
+        path: |
+          text_info.txt
+          raw_hex.txt
