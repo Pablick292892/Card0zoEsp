@@ -14,12 +14,16 @@ jobs:
         echo "THEOS=$THEOS" >> $GITHUB_ENV
         brew install ldid
 
-    - name: Force Download Dobby
+    - name: Download Dobby Archive
       run: |
-        # Удаляем старую пустую папку, если она есть
+        # Удаляем старую папку
         rm -rf Dobby
-        # Качаем Dobby со всеми внутренними папками (submodules)
-        git clone --recursive https://github.com/jmpews/Dobby.git Dobby
+        # Скачиваем архив с Dobby (где все файлы уже внутри)
+        curl -L -o dobby.tar.gz https://github.com/jmpews/Dobby/archive/refs/heads/master.tar.gz
+        # Распаковываем
+        tar -xzf dobby.tar.gz
+        # Переименовываем папку
+        mv Dobby-master Dobby
         
     - name: Build
       run: make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
