@@ -8,6 +8,6 @@ TWEAK_NAME = Card0zoEsp
 
 Card0zoEsp_FILES = main.mm fishhook/fishhook.c
 Card0zoEsp_CFLAGS = -I./fishhook
-Card0zoEsp_LDFLAGS = -undefined dynamic_lookup -framework UIKit -framework Foundation
+Card0zoEsp_LDFLAGS = -undefined dynamic_lookup -framework UIKit -framework Foundation -framework Security
 
 include $(THEOS_MAKE_PATH)/tweak.mk
