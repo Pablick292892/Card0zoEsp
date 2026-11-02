@@ -14,14 +14,12 @@ jobs:
         echo "THEOS=$THEOS" >> $GITHUB_ENV
         brew install ldid
 
-    - name: Download Dobby Archive
+    - name: Download Dobby ZIP
       run: |
-        # Удаляем старую папку
-        rm -rf Dobby
-        # Скачиваем архив с Dobby (где все файлы уже внутри)
-        curl -L -o dobby.tar.gz https://github.com/jmpews/Dobby/archive/refs/heads/master.tar.gz
+        # Скачиваем ZIP-архив
+        curl -L -o dobby.zip https://github.com/jmpews/Dobby/archive/refs/heads/master.zip
         # Распаковываем
-        tar -xzf dobby.tar.gz
+        unzip -q dobby.zip
         # Переименовываем папку
         mv Dobby-master Dobby
         
