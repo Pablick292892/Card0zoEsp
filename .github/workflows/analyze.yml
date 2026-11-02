@@ -18,14 +18,9 @@ jobs:
         BIN=$(find . -name "libloader" -type f | head -n 1)
         echo "Analyzing: $BIN"
         
-        # 1. Какие функции он импортирует (что вызывает из системы)
-        echo "=== Imports (Что он дергает) ==="
-        nm -u "$BIN" | sort
+        echo "=== STRINGS (Тексты) ==="
+        # Ищем все, что связано с ошибками, проверками и памятью
+        strings "$BIN" | grep -iE "927|6072|security|threat|memory|vm_|ptrace|integrity|checksum|jailbreak|simulator|frida|substrate|hook|inject|library" | head -n 100
         
-        # 2. Ищем конкретные подозрительные вызовы
-        echo "=== Suspicious Calls ==="
-        nm -u "$BIN" | grep -iE "sysctl|ptrace|mach_vm|vm_|dyld|task_|csops|SecItem|DCAppAttest" || echo "Nothing found"
-        
-        # 3. Ищем строки (вдруг что-то не зашифровано)
-        echo "=== Strings (Тексты) ==="
-        strings "$BIN" | grep -iE "crypt|fairplay|simulator|jailbreak|debug|integrity|checksum" | head -n 50
+        echo "=== MACH-O HEADER ==="
+        otool -hv "$BIN"
