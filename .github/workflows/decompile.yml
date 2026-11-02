@@ -1,0 +1,27 @@
+name: Decompile Libloader
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  decompile:
+    runs-on: macos-14
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install RetDec
+      run: |
+        brew install retdec
+
+    - name: Decompile
+      run: |
+        retdec-decompiler --output decompiled.c libloader || echo "Decompilation failed"
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: decompiled-code
+        path: decompiled.c
