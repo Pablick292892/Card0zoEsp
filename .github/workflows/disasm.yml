@@ -1,4 +1,4 @@
-name: Find Csops Calls
+name: Extract and Search
 
 on:
   push:
@@ -6,25 +6,28 @@ on:
   workflow_dispatch:
 
 jobs:
-  find:
+  extract:
     runs-on: macos-14
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Find Imports
+    - name: Disassemble and Search
       run: |
-        # Ищем в строках бинарника упоминания csops, fstat, mmap
-        echo "=== Searching for csops/fstat/mmap ===" > search_results.txt
-        strings libloader | grep -iE "csops|fstat|mmap|sysctl" >> search_results.txt || echo "Not found in strings"
+        # Дизассемблируем
+        otool -tv libloader > disasm.txt
         
-        # Ищем в таблице символов (если есть)
-        echo "=== Symbols ===" >> search_results.txt
-        nm -u libloader | grep -iE "csops|fstat|mmap|sysctl" >> search_results.txt || echo "Not found in symbols"
+        # Ищем нужные функции
+        echo "=== Searching ===" > results.txt
+        grep -i -n -B 2 -A 2 -E "dlsym|csops|mach_vm" disasm.txt >> results.txt || echo "Not found"
+        
+        # Вырезаем кусок от 0x4100 до 0x5000 для декомпиляции
+        dd if=libloader of=chunk.bin bs=1 skip=16640 count=3840
 
-    - name: Upload
+    - name: Upload Results
       uses: actions/upload-artifact@v4
       with:
-        name: search-results
-        path: search_results.txt
- 
+        name: search-and-chunk
+        path: |
+          results.txt
+          chunk.bin
