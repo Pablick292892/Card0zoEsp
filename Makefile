@@ -6,10 +6,10 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Card0zoEsp
 
-# Добавляем исходники Dobby и наш main
-Card0zoEsp_FILES = main.mm $(wildcard Dobby/source/*.cc) $(wildcard Dobby/source/*.c) $(wildcard Dobby/builtin-plugin/*.cc)
+# Берем ВСЕ файлы исходников из папки Dobby, чтобы он собрался
+Card0zoEsp_FILES = main.mm $(wildcard Dobby/source/*.cc) $(wildcard Dobby/source/*.c) $(wildcard Dobby/source/*.cpp)
 
-# Указываем компилятору, где искать заголовки (dobby.h)
+# Указываем компилятору, где искать dobby.h
 Card0zoEsp_CFLAGS = -I./Dobby/include -I./fishhook
 
 Card0zoEsp_LDFLAGS = -undefined dynamic_lookup -framework UIKit -framework Foundation -framework Security
