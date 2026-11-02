@@ -1,4 +1,4 @@
-name: Full Code Analysis
+name: Extract Hex around check
 
 on:
   push:
@@ -6,32 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  analyze:
-    runs-on: macos-14
+  extract:
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Analyze
+    - name: Extract
       run: |
-        # 1. Генерируем дизассемблер
-        otool -tv libloader > disasm.txt
+        # Адрес проверки в файле (в десятичном виде для dd)
+        # 0x0447c = 17532
+        # Вытаскиваем 32 байта начиная с 0x04470
+        dd if=libloader of=hex_dump.bin bs=1 skip=$((0x04470)) count=32
         
-        # 2. Вытаскиваем все вызовы системных функций, которые нам нужны
-        # Ищем вызовы (bl) и системные регистры (x0, x1 и т.д.) для проверок
-        echo "=== MEMORY & DEBUG CHECKS ===" > results.txt
-        grep -n -B 2 -A 2 -iE "mach_vm|sysctl|ptrace|task_info|vm_protect|csops" disasm.txt >> results.txt || true
-        
-        # 3. Вытаскиваем все места, где он грузит строки (adrp x0 + add x0)
-        echo "=== STRINGS LOADING ===" >> results.txt
-        grep -n -B 2 -A 2 "adrp x0" disasm.txt | head -n 500 >> results.txt || true
-        
-        # 4. Вытаскиваем все места, где он проверяет флаги (cbz, cbnz, cmp, tst)
-        echo "=== BRANCH CHECKS ===" >> results.txt
-        grep -n -B 2 -A 2 -iE "cbz|cbnz|tst" disasm.txt | head -n 500 >> results.txt || true
+        # Переводим в hex
+        xxd hex_dump.bin > hex_dump.txt
 
-    - name: Upload Artifacts
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: full-analysis-results
-        path: results.txt
+        name: hex-data
+        path: hex_dump.txt
