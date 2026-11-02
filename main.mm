@@ -44,3 +44,4 @@ static void init_hooks(void) {
         dlclose(handle);
     }
 }
+ 
