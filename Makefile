@@ -6,11 +6,11 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Card0zoEsp
 
-# Берем ВСЕ файлы исходников из папки Dobby, чтобы он собрался
+# Собираем наш код и все исходники Dobby
 Card0zoEsp_FILES = main.mm $(wildcard Dobby/source/*.cc) $(wildcard Dobby/source/*.c) $(wildcard Dobby/source/*.cpp)
 
-# Указываем компилятору, где искать dobby.h
-Card0zoEsp_CFLAGS = -I./Dobby/include -I./fishhook
+# -Wno-module-import-in-extern-c отключает ту самую ошибку
+Card0zoEsp_CFLAGS = -I./Dobby/include -I./fishhook -Wno-module-import-in-extern-c
 
 Card0zoEsp_LDFLAGS = -undefined dynamic_lookup -framework UIKit -framework Foundation -framework Security
 
