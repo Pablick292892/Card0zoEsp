@@ -1,4 +1,4 @@
-name: Deep Function Analysis
+name: Full Code Analysis
 
 on:
   push:
@@ -14,25 +14,24 @@ jobs:
 
     - name: Analyze
       run: |
-        # Дизассемблируем
+        # 1. Генерируем дизассемблер
         otool -tv libloader > disasm.txt
         
-        echo "=== 1. Call to dlsym (динамический поиск) ==="
-        grep -n -B 2 -A 2 "dlsym" disasm.txt > dlsym_calls.txt || true
+        # 2. Вытаскиваем все вызовы системных функций, которые нам нужны
+        # Ищем вызовы (bl) и системные регистры (x0, x1 и т.д.) для проверок
+        echo "=== MEMORY & DEBUG CHECKS ===" > results.txt
+        grep -n -B 2 -A 2 -iE "mach_vm|sysctl|ptrace|task_info|vm_protect|csops" disasm.txt >> results.txt || true
         
-        echo "=== 2. Call to dlopen (загрузка библиотек) ==="
-        grep -n -B 2 -A 2 "dlopen" disasm.txt > dlopen_calls.txt || true
+        # 3. Вытаскиваем все места, где он грузит строки (adrp x0 + add x0)
+        echo "=== STRINGS LOADING ===" >> results.txt
+        grep -n -B 2 -A 2 "adrp x0" disasm.txt | head -n 500 >> results.txt || true
         
-        echo "=== 3. Call to sysctl/mach_vm (попытка) ==="
-        grep -n -B 2 -A 2 "sysctl\|mach_vm" disasm.txt > system_calls.txt || true
-        
-        echo "Done!"
+        # 4. Вытаскиваем все места, где он проверяет флаги (cbz, cbnz, cmp, tst)
+        echo "=== BRANCH CHECKS ===" >> results.txt
+        grep -n -B 2 -A 2 -iE "cbz|cbnz|tst" disasm.txt | head -n 500 >> results.txt || true
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: deep-analysis
-        path: |
-          dlsym_calls.txt
-          dlopen_calls.txt
-          system_calls.txt
+        name: full-analysis-results
+        path: results.txt
