@@ -1,4 +1,4 @@
-name: Find Error Writes
+name: Find Csops Calls
 
 on:
   push:
@@ -12,17 +12,18 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Find Str Commands
+    - name: Find Imports
       run: |
-        # Дизассемблируем оригинальный libloader (он должен лежать в репо)
-        otool -tv libloader > disasm_full.txt
+        # Ищем в строках бинарника упоминания csops, fstat, mmap
+        echo "=== Searching for csops/fstat/mmap ===" > search_results.txt
+        strings libloader | grep -iE "csops|fstat|mmap|sysctl" >> search_results.txt || echo "Not found in strings"
         
-        # Ищем все места, где идет запись в память (str) с регистром w8
-        # и выводим 3 строки до и 3 после, чтобы видеть, какой код туда пишется
-        grep -n -B 3 -A 3 "str.*w8, \[x23\]" disasm_full.txt > error_writes.txt || echo "Not found"
+        # Ищем в таблице символов (если есть)
+        echo "=== Symbols ===" >> search_results.txt
+        nm -u libloader | grep -iE "csops|fstat|mmap|sysctl" >> search_results.txt || echo "Not found in symbols"
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: error-writes
-        path: error_writes.txt
+        name: search-results
+        path: search_results.txt
