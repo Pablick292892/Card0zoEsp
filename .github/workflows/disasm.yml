@@ -14,9 +14,6 @@ jobs:
 
     - name: Analyze
       run: |
-        echo "=== 1. IMPORTS (Что он дергает) ==="
-        nm -u libloader > imports.txt
-        
         echo "=== 2. STRINGS (Все строки в бинарнике) ==="
         strings libloader > strings.txt
         
@@ -24,8 +21,9 @@ jobs:
         otool -tv libloader > disasm.txt
         
         echo "=== 4. MACH VM AND SYSCTL CALLS ==="
-        grep -n -i "mach_vm" disasm.txt > mach_vm.txt
-        grep -n -i "sysctl" disasm.txt > sysctl.txt
+        # Добавили || true, чтобы не крашилось, если не найдет
+        grep -n -i "mach_vm" disasm.txt > mach_vm.txt || true
+        grep -n -i "sysctl" disasm.txt > sysctl.txt || true
         
         echo "Done!"
 
@@ -34,7 +32,6 @@ jobs:
       with:
         name: full-analysis
         path: |
-          imports.txt
           strings.txt
           mach_vm.txt
           sysctl.txt
