@@ -1,4 +1,4 @@
-name: Disassemble libloader
+name: Full Anti-Cheat Analysis
 
 on:
   push:
@@ -6,24 +6,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  disasm:
+  analyze:
     runs-on: macos-14
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Find Offsets
+    - name: Analyze
       run: |
-        echo "=== ALL IMPORTS (Что он вообще дергает) ==="
-        otool -L libloader
-        nm -u libloader
+        echo "=== 1. IMPORTS (Что он дергает) ==="
+        nm -u libloader > imports.txt
         
-        echo "=== SPECIFIC CHECKS ==="
+        echo "=== 2. STRINGS (Все строки в бинарнике) ==="
+        strings libloader > strings.txt
+        
+        echo "=== 3. DISASSEMBLY ==="
         otool -tv libloader > disasm.txt
-        grep -n -B 3 -A 3 -iE "mach_vm|sysctl|ptrace|csops|SecItem|task_info|getenv|dlopen|dlsym|got" disasm.txt | head -n 200 || echo "Nothing found"
+        
+        echo "=== 4. MACH VM AND SYSCTL CALLS ==="
+        grep -n -i "mach_vm" disasm.txt > mach_vm.txt
+        grep -n -i "sysctl" disasm.txt > sysctl.txt
+        
+        echo "Done!"
 
-    - name: Upload Disassembly
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: disasm-log
-        path: disasm.txt
+        name: full-analysis
+        path: |
+          imports.txt
+          strings.txt
+          mach_vm.txt
+          sysctl.txt
