@@ -14,9 +14,11 @@ jobs:
         echo "THEOS=$THEOS" >> $GITHUB_ENV
         brew install ldid
 
-    - name: Download Dobby (with submodules)
+    - name: Force Download Dobby
       run: |
-        # Скачиваем Dobby со всеми его внутренними зависимостями
+        # Удаляем старую пустую папку, если она есть
+        rm -rf Dobby
+        # Качаем Dobby со всеми внутренними папками (submodules)
         git clone --recursive https://github.com/jmpews/Dobby.git Dobby
         
     - name: Build
