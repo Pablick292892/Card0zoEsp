@@ -1,45 +1,26 @@
 #import <Foundation/Foundation.h>
 #import <mach-o/dyld.h>
+#import <mach-o/loader.h>
 #import <mach/mach.h>
-#import <dlfcn.h>
-
-// Подключаем Dobby
-#include "dobby.h"
-
-// Оригинальная функция
-static kern_return_t (*orig_mach_vm_region)(vm_map_t, vm_address_t *, vm_size_t, vm_region_flavor_t, vm_region_info_t, mach_msg_type_number_t *, mach_port_t *);
-
-// Наш хук
-static kern_return_t fake_mach_vm_region(vm_map_t target_task, vm_address_t *address, vm_size_t size, vm_region_flavor_t flavor, vm_region_info_t info, mach_msg_type_number_t *info_cnt, mach_port_t *object_name) {
-    uintptr_t our_lib_addr = 0;
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (name && (strstr(name, "Card0zoESP") || strstr(name, "OxideTest"))) {
-            our_lib_addr = (uintptr_t)_dyld_get_image_header(i);
-            break;
-        }
-    }
-
-    // Если античит лезет к нашей либе, прячем её
-    if (our_lib_addr != 0 && *address >= (our_lib_addr - 0x100000) && *address <= (our_lib_addr + 0x100000)) {
-        *address += size; 
-        return KERN_SUCCESS; 
-    }
-    
-    // Во всех остальных случаях вызываем оригинал
-    return orig_mach_vm_region(target_task, address, size, flavor, info, info_cnt, object_name);
-}
 
 __attribute__((constructor))
-static void init_hooks(void) {
-    void *handle = dlopen("/usr/lib/libSystem.B.dylib", RTLD_LAZY);
-    if (handle) {
-        void *target = dlsym(handle, "mach_vm_region");
-        if (target) {
-            // Ставим хук через Dobby
-            DobbyHook(target, (void *)fake_mach_vm_region, (void **)&orig_mach_vm_region);
+static void init_patch(void) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Получаем заголовок главного бинаря игры
+        const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
+        if (!header) return;
+
+        // Ищем сегмент шифрования и меняем флаг на 1 (типа зашифровано)
+        const struct load_command *cmd = (const struct load_command *)(header + 1);
+        for (uint32_t i = 0; i < header->ncmds; i++) {
+            if (cmd->cmd == LC_ENCRYPTION_INFO_64) {
+                struct encryption_info_command_64 *info = (struct encryption_info_command_64 *)cmd;
+                if (info->cryptid == 0) {
+                    vm_protect(mach_task_self(), (vm_address_t)info, sizeof(*info), false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                    info->cryptid = 1;
+                }
+            }
+            cmd = (const struct load_command *)((uint8_t *)cmd + cmd->cmdsize);
         }
-        dlclose(handle);
-    }
+    });
 }
