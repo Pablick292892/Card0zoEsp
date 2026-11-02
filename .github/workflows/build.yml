@@ -6,7 +6,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       
-    - name: Install Theos & Dependencies
+    - name: Install Theos
       run: |
         export THEOS=$HOME/theos
         git clone --recursive https://github.com/theos/theos.git $THEOS
@@ -14,10 +14,10 @@ jobs:
         echo "THEOS=$THEOS" >> $GITHUB_ENV
         brew install ldid
 
-    - name: Download Dobby
+    - name: Download Dobby (with submodules)
       run: |
-        # Скачиваем Dobby напрямую в папку сборки
-        git clone https://github.com/jmpews/Dobby.git Dobby
+        # Скачиваем Dobby со всеми его внутренними зависимостями
+        git clone --recursive https://github.com/jmpews/Dobby.git Dobby
         
     - name: Build
       run: make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
