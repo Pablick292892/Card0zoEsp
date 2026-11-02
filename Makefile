@@ -9,8 +9,8 @@ TWEAK_NAME = Card0zoEsp
 # Собираем наш код и все исходники Dobby
 Card0zoEsp_FILES = main.mm $(wildcard Dobby/source/*.cc) $(wildcard Dobby/source/*.c) $(wildcard Dobby/source/*.cpp)
 
-# -Wno-module-import-in-extern-c отключает ту самую ошибку
-Card0zoEsp_CFLAGS = -I./Dobby/include -I./fishhook -Wno-module-import-in-extern-c
+# Добавили -I./Dobby/source, чтобы он нашел dobby/types.h и отключили ошибку C++
+Card0zoEsp_CFLAGS = -I./Dobby/include -I./Dobby/source -I./fishhook -Wno-module-import-in-extern-c
 
 Card0zoEsp_LDFLAGS = -undefined dynamic_lookup -framework UIKit -framework Foundation -framework Security
 
