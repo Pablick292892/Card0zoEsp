@@ -1,4 +1,4 @@
-name: Disassemble Patched File
+name: Find Error Writes
 
 on:
   push:
@@ -6,19 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  disasm:
+  find:
     runs-on: macos-14
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Find Offsets
+    - name: Find Str Commands
       run: |
-        # Просто дизассемблируем файл
-        otool -tv libloader > disasm.txt
+        # Дизассемблируем оригинальный libloader (он должен лежать в репо)
+        otool -tv libloader > disasm_full.txt
+        
+        # Ищем все места, где идет запись в память (str) с регистром w8
+        # и выводим 3 строки до и 3 после, чтобы видеть, какой код туда пишется
+        grep -n -B 3 -A 3 "str.*w8, \[x23\]" disasm_full.txt > error_writes.txt || echo "Not found"
 
-    - name: Upload Disassembly
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: disasm-log
-        path: disasm.txt
+        name: error-writes
+        path: error_writes.txt
