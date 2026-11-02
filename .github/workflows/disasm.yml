@@ -1,1 +1,29 @@
+name: Disassemble libloader
 
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  disasm:
+    runs-on: macos-14
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Find Offsets
+      run: |
+        echo "=== ALL IMPORTS (Что он вообще дергает) ==="
+        otool -L libloader
+        nm -u libloader
+        
+        echo "=== SPECIFIC CHECKS ==="
+        otool -tv libloader > disasm.txt
+        grep -n -B 3 -A 3 -iE "mach_vm|sysctl|ptrace|csops|SecItem|task_info|getenv|dlopen|dlsym|got" disasm.txt | head -n 200 || echo "Nothing found"
+
+    - name: Upload Disassembly
+      uses: actions/upload-artifact@v4
+      with:
+        name: disasm-log
+        path: disasm.txt
