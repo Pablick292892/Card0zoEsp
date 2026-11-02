@@ -1,4 +1,4 @@
-name: Full Anti-Cheat Analysis
+name: Deep Function Analysis
 
 on:
   push:
@@ -14,24 +14,25 @@ jobs:
 
     - name: Analyze
       run: |
-        echo "=== 2. STRINGS (Все строки в бинарнике) ==="
-        strings libloader > strings.txt
-        
-        echo "=== 3. DISASSEMBLY ==="
+        # Дизассемблируем
         otool -tv libloader > disasm.txt
         
-        echo "=== 4. MACH VM AND SYSCTL CALLS ==="
-        # Добавили || true, чтобы не крашилось, если не найдет
-        grep -n -i "mach_vm" disasm.txt > mach_vm.txt || true
-        grep -n -i "sysctl" disasm.txt > sysctl.txt || true
+        echo "=== 1. Call to dlsym (динамический поиск) ==="
+        grep -n -B 2 -A 2 "dlsym" disasm.txt > dlsym_calls.txt || true
+        
+        echo "=== 2. Call to dlopen (загрузка библиотек) ==="
+        grep -n -B 2 -A 2 "dlopen" disasm.txt > dlopen_calls.txt || true
+        
+        echo "=== 3. Call to sysctl/mach_vm (попытка) ==="
+        grep -n -B 2 -A 2 "sysctl\|mach_vm" disasm.txt > system_calls.txt || true
         
         echo "Done!"
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: full-analysis
+        name: deep-analysis
         path: |
-          strings.txt
-          mach_vm.txt
-          sysctl.txt
+          dlsym_calls.txt
+          dlopen_calls.txt
+          system_calls.txt
