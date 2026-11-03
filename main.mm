@@ -3,14 +3,13 @@
 #import <mach-o/loader.h>
 #import <mach/mach.h>
 #import <dlfcn.h>
-#include "dobby.h"
 
-#define LIBLOADER_DISPATCH_OFFSET 0x04100
-
-static void (*orig_dispatch)(void);
-
-static void fake_dispatch(void) {
-    // Ничего не делаем, просто выходим
+// Функция для безопасной перезаписи памяти
+static void patch_memory(void *address, const uint8_t *bytes, size_t size) {
+    kern_return_t kr = vm_protect(mach_task_self(), (vm_address_t)address, size, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr == KERN_SUCCESS) {
+        memcpy(address, bytes, size);
+    }
 }
 
 static void patch_cryptid() {
@@ -33,6 +32,7 @@ __attribute__((constructor))
 static void init_hooks(void) {
     patch_cryptid();
 
+    // Ищем libloader в памяти
     uintptr_t libloader_base = 0;
     uint32_t count = _dyld_image_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -44,7 +44,9 @@ static void init_hooks(void) {
     }
 
     if (libloader_base != 0) {
-        void *target = (void *)(libloader_base + LIBLOADER_DISPATCH_OFFSET);
-        DobbyHook(target, (void *)fake_dispatch, (void **)&orig_dispatch);
+        // Наш патч: заменяем чтение флага на mov w10, #0
+        // Адрес: libloader_base + 0x0447c
+        uint8_t patch_bytes[] = {0x00, 0x00, 0x80, 0x52}; // mov w10, #0
+        patch_memory((void *)(libloader_base + 0x0447C), patch_bytes, sizeof(patch_bytes));
     }
 }
