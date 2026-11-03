@@ -16,10 +16,10 @@ jobs:
 
     - name: Unzip Dobby
       run: |
-        # Распаковываем загруженный ZIP
-       unzip -q Dobby-master.zip.
-        # Переименовываем папку (на случай, если она называется Dobby-master)
-        mv Dobby-master Dobby || true
+        # Распаковываем загруженный ZIP с правильным именем
+        unzip -q Dobby-master.zip
+        # Переименовываем папку для удобства
+        mv Dobby-master Dobby
         
     - name: Build
       run: make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
