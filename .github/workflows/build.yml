@@ -16,11 +16,9 @@ jobs:
 
     - name: Download Dobby ZIP
       run: |
-        # Скачиваем ZIP-архив
+        # Скачиваем архив (в нем все папки)
         curl -L -o dobby.zip https://github.com/jmpews/Dobby/archive/refs/heads/master.zip
-        # Распаковываем
         unzip -q dobby.zip
-        # Переименовываем папку
         mv Dobby-master Dobby
         
     - name: Build
