@@ -5,21 +5,14 @@
 #import <dlfcn.h>
 #include "dobby.h"
 
-// Адрес их главного диспетчера (относительно начала libloader)
-// Мы вычислили его ранее: 0x04100
 #define LIBLOADER_DISPATCH_OFFSET 0x04100
 
-// Оригинальная функция (если она возвращает что-то важное)
-// Скорее всего, она void, но на всякий случай оставим указатель
 static void (*orig_dispatch)(void);
 
-// Наш хук: просто выходим из функции, ничего не делая
 static void fake_dispatch(void) {
-    // Ничего не делаем, просто выходим.
-    // Это отрубит всю их цепочку проверок.
+    // Ничего не делаем, просто выходим (возвращаем "успех")
 }
 
-// Патч cryptid (обход 927) — оставляем, он работает
 static void patch_cryptid() {
     const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
     if (!header) return;
@@ -40,7 +33,6 @@ __attribute__((constructor))
 static void init_hooks(void) {
     patch_cryptid();
 
-    // Ищем libloader в памяти
     uintptr_t libloader_base = 0;
     uint32_t count = _dyld_image_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -52,10 +44,7 @@ static void init_hooks(void) {
     }
 
     if (libloader_base != 0) {
-        // Вычисляем адрес их диспетчера
         void *target = (void *)(libloader_base + LIBLOADER_DISPATCH_OFFSET);
-        
-        // Ставим хук через Dobby
         DobbyHook(target, (void *)fake_dispatch, (void **)&orig_dispatch);
     }
 }
