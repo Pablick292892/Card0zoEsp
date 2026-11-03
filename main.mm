@@ -10,7 +10,7 @@
 static void (*orig_dispatch)(void);
 
 static void fake_dispatch(void) {
-    // Ничего не делаем, просто выходим (возвращаем "успех")
+    // Ничего не делаем, просто выходим
 }
 
 static void patch_cryptid() {
