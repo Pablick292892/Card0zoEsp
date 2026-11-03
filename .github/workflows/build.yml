@@ -2,7 +2,7 @@ name: Build Tweak
 on: [push, workflow_dispatch]
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
     - uses: actions/checkout@v4
       
@@ -16,9 +16,7 @@ jobs:
 
     - name: Unzip Dobby
       run: |
-        # Распаковываем загруженный ZIP с правильным именем
         unzip -q Dobby-master.zip
-        # Переименовываем папку для удобства
         mv Dobby-master Dobby
         
     - name: Build
