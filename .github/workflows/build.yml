@@ -2,7 +2,7 @@ name: Build Tweak
 on: [push, workflow_dispatch]
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-13  # <--- ОТКАТ НА СТАБИЛЬНУЮ ВЕРСИЮ
     steps:
     - uses: actions/checkout@v4
       
@@ -14,11 +14,6 @@ jobs:
         echo "THEOS=$THEOS" >> $GITHUB_ENV
         brew install ldid
 
-    - name: Unzip Dobby
-      run: |
-        unzip -q Dobby-master.zip
-        mv Dobby-master Dobby
-        
     - name: Build
       run: make TARGET=iphone:clang:latest:14.0 ARCHS=arm64
       
