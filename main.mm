@@ -3,15 +3,24 @@
 #import <mach-o/loader.h>
 #import <mach/mach.h>
 #import <dlfcn.h>
+#import <string.h>
+#import "fishhook/fishhook.h"
 
-// Функция для безопасной перезаписи памяти
-static void patch_memory(void *address, const uint8_t *bytes, size_t size) {
-    kern_return_t kr = vm_protect(mach_task_self(), (vm_address_t)address, size, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-    if (kr == KERN_SUCCESS) {
-        memcpy(address, bytes, size);
+// Оригинальные функции
+static uint32_t (*orig_dyld_image_count)(void);
+static const char* (*orig_dyld_get_image_name)(uint32_t);
+static const struct mach_header* (*orig_dyld_get_image_header)(uint32_t);
+
+// Наша функция (подменяет имя)
+static const char* fake_dyld_get_image_name(uint32_t index) {
+    const char* name = orig_dyld_get_image_name(index);
+    if (name && strstr(name, "Card0zoESP")) {
+        return "/usr/lib/libSystem.B.dylib"; // Подсовываем системную
     }
+    return name;
 }
 
+// Патч cryptid (обход 927)
 static void patch_cryptid() {
     const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
     if (!header) return;
@@ -31,22 +40,12 @@ static void patch_cryptid() {
 __attribute__((constructor))
 static void init_hooks(void) {
     patch_cryptid();
-
-    // Ищем libloader в памяти
-    uintptr_t libloader_base = 0;
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (name && strstr(name, "libloader")) {
-            libloader_base = (uintptr_t)_dyld_get_image_header(i);
-            break;
-        }
-    }
-
-    if (libloader_base != 0) {
-        // Наш патч: заменяем чтение флага на mov w10, #0
-        // Адрес: libloader_base + 0x0447c
-        uint8_t patch_bytes[] = {0x00, 0x00, 0x80, 0x52}; // mov w10, #0
-        patch_memory((void *)(libloader_base + 0x0447C), patch_bytes, sizeof(patch_bytes));
-    }
+    
+    // Хукаем только функцию имени
+    struct rebinding rebinds[1];
+    rebinds[0].name = "_dyld_get_image_name";
+    rebinds[0].replacement = (void *)fake_dyld_get_image_name;
+    rebinds[0].replaced = (void **)&orig_dyld_get_image_name;
+    
+    rebind_symbols(rebinds, 1);
 }
