@@ -17,7 +17,7 @@ jobs:
     - name: Unzip Dobby
       run: |
         # Распаковываем загруженный ZIP
-        unzip -q dobby.zip
+       unzip -q Dobby-master.zip.
         # Переименовываем папку (на случай, если она называется Dobby-master)
         mv Dobby-master Dobby || true
         
