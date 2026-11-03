@@ -2,7 +2,7 @@ name: Build Tweak
 on: [push, workflow_dispatch]
 jobs:
   build:
-    runs-on: macos-13  # <--- ОТКАТ НА СТАБИЛЬНУЮ ВЕРСИЮ
+    runs-on: macos-15 # <--- ОТКАТ НА СТАБИЛЬНУЮ ВЕРСИЮ
     steps:
     - uses: actions/checkout@v4
       
