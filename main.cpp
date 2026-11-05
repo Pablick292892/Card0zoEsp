@@ -15,11 +15,10 @@ static void (*original_exit)(int status) = NULL;
 static void (*original_abort)(void) = NULL;
 static void (*original_addSubview)(id self, SEL _cmd, id view) = NULL;
 
-// 1. Хук для kill: если античит пытается прибить процесс через SIGKILL / SIGABRT
+// 1. Реализация хуков (обязательно ДО вызова rebind_symbols)
 int hooked_kill(pid_t pid, int sig) {
     if (pid == getpid() && (sig == SIGKILL || sig == SIGABRT || sig == SIGTERM)) {
-        // Игнорируем попытку самоубийства процесса, возвращаем успех, античит обманут!
-        return 0;
+        return 0; // Игнорируем попытку убить процесс
     }
     if (original_kill) {
         return original_kill(pid, sig);
@@ -27,20 +26,22 @@ int hooked_kill(pid_t pid, int sig) {
     return -1;
 }
 
-// 2. Хук для перехвата добавления кастомных UI-элементов (если это кастомный UIView от античита)
+void hooked_exit(int status) {
+    return; // Глушим штатный exit
+}
+
+void hooked_abort(void) {
+    return; // Глушим аварийный abort
+}
+
 void hooked_addSubview(id self, SEL _cmd, id view) {
-    // Проверяем класс добавляемого элемента на предмет подозрительных алертов или кастомных окон
     if (view && [NSStringFromClass([view class]) rangeOfString:@"Alert" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        // Глушим добавление защитного окна на экран
-        return;
+        return; // Глушим показ кастомных алертов античита
     }
     if (original_addSubview) {
         original_addSubview(self, _cmd, view);
     }
 }
-
-void hooked_exit(int status) { return; }
-void hooked_abort(void) { return; }
 
 __attribute__((constructor)) void impenetrable_shield_bypass() {
     // 1. Сброс cryptid для decrypted IPA
@@ -60,7 +61,7 @@ __attribute__((constructor)) void impenetrable_shield_bypass() {
         }
     }
 
-    // 2. Перехват через fishhook (exit, abort, kill)
+    // 2. Перехват через fishhook (exit, abort, kill) теперь видит все функции
     struct rebinding rebindings[] = {
         { "exit",  (void*)hooked_exit,  (void**)&original_exit  },
         { "abort", (void*)hooked_abort, (void**)&original_abort },
