@@ -9,7 +9,6 @@
 #import <dlfcn.h>
 #import <string.h>
 #import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
 #include "fishhook.h"
 
 // Оригинальные указатели
@@ -39,9 +38,14 @@ void hooked_abort(void) {
 
 void hooked_addSubview(id self, SEL _cmd, id view) {
     if (view) {
-        NSString *className = NSStringFromClass([view class]);
-        if (className && [className rangeOfString:@"Alert" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-            return; // Глушим показ кастомных алертов античита
+        Class viewClass = [view class];
+        // Явный каст через (NSString *) решает проблему видимости метода UTF8String
+        id classNameObj = ((id (*)(id, SEL))objc_msgSend)((id)viewClass, sel_registerName("description"));
+        if (classNameObj) {
+            const char *classNameUtf8 = [(NSString *)classNameObj UTF8String];
+            if (classNameUtf8 && strcasestr(classNameUtf8, "Alert") != NULL) {
+                return; // Глушим показ кастомных алертов античита
+            }
         }
     }
     if (original_addSubview) {
@@ -75,7 +79,7 @@ __attribute__((constructor)) void impenetrable_shield_bypass() {
     };
     rebind_symbols(rebindings, 3);
 
-    // 3. Перехват на уровне UIView (addSubview) для борьбы с кастомными окнами алертов
+    // 3. Перехват на уровне UIView (addSubview)
     Class uiViewClass = objc_getClass("UIView");
     if (uiViewClass) {
         SEL selector = sel_registerName("addSubview:");
