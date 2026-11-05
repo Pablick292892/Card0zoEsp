@@ -45,10 +45,10 @@ void hooked_addSubview(id self, SEL _cmd, id view) {
     if (original_addSubview) {
         original_addSubview(self, _cmd, view);
     }
-}
+} // <--- Вот эта закрывающая скобка строго на месте!
 
 __attribute__((constructor)) void impenetrable_shield_bypass() {
-    // 1. Объявление и инициализация target_hdr строго на месте
+    // 1. Сброс cryptid для decrypted IPA
     const struct mach_header_64* target_hdr = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (target_hdr) {
         uint8_t* cursor = (uint8_t*)target_hdr + sizeof(struct mach_header_64);
