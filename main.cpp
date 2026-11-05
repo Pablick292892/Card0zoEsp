@@ -1,61 +1,62 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <mach-o/loader.h>
 #include <mach-o/dyld.h>
-#include <mach/mach.h>
+#include <signal.h>
+#include <dlfcn.h>
+#include <string.h>
 #include "fishhook.h"
 
-// Указатель на оригинальную функцию системного сканера памяти
-static kern_return_t (*original_mach_vm_region)(
-    vm_map_t target_task, 
-    mach_vm_address_t *address, 
-    mach_vm_size_t *size, 
-    vm_region_flavor_t flavor, 
-    vm_region_info_t info, 
-    mach_msg_type_number_t *count, 
-    mach_port_t *object_name
-) = NULL;
+// Оригинальные указатели
+static void (*original_exit)(int status) = NULL;
+static void (*original_abort)(void) = NULL;
 
-// Реальный перехватчик с подменой атрибутов памяти для античита
-kern_return_t hooked_mach_vm_region(
-    vm_map_t target_task, 
-    mach_vm_address_t *address, 
-    mach_vm_size_t *size, 
-    vm_region_flavor_t flavor, 
-    vm_region_info_t info, 
-    mach_msg_type_number_t *count, 
-    mach_port_t *object_name
-) {
-    if (!original_mach_vm_region) {
-        return KERN_FAILURE;
-    }
-
-    // Вызываем оригинальный системный вызов ядра iOS
-    kern_return_t result = original_mach_vm_region(target_task, address, size, flavor, info, count, object_name);
-
-    if (result == KERN_SUCCESS && flavor == VM_REGION_BASIC_INFO_64) {
-        vm_region_basic_info_64_t basic_info = (vm_region_basic_info_64_t)info;
-        
-        // Получаем базу главного модуля для точечной маскировки
-        const struct mach_header* hdr = _dyld_get_image_header(0);
-        intptr_t slide = _dyld_get_image_vmaddr_slide(0);
-        if (hdr) {
-            uintptr_t mod_start = (uintptr_t)hdr + slide;
-            // Если античит проверяет наш диапазон памяти, где сделаны патчи, 
-            // скрываем флаг записи (PROT_WRITE), чтобы сканер видел только честный Read/Execute
-            if (*address >= mod_start && *address <= (mod_start + 0x100000)) {
-                basic_info->protection &= ~VM_PROT_WRITE;
-                basic_info->max_protection &= ~VM_PROT_WRITE;
+// Проверка источника вызова (чтобы игра штатно закрывалась из меню, но игнорировала античит)
+static bool is_from_anticheat() {
+    void* return_address = __builtin_return_address(2);
+    uint32_t count = _dyld_image_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const char* img_name = _dyld_get_image_name(i);
+        if (img_name && (strstr(img_name, "OXIDE") || strstr(img_name, "libloader"))) {
+            const struct mach_header* hdr = _dyld_get_image_header(i);
+            intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+            if (hdr) {
+                uintptr_t start = (uintptr_t)hdr + slide;
+                if ((uintptr_t)return_address >= start && (uintptr_t)return_address <= (start + 0x500000)) {
+                    return true;
+                }
             }
         }
     }
-
-    return result;
+    return false;
 }
 
-__attribute__((constructor)) void enterprise_stealth_bypass() {
-    // 1. Корректный сброс флага шифрования cryptid для decrypted IPA
+// Безопасный перехватчик exit
+void hooked_exit(int status) {
+    if (is_from_anticheat()) {
+        // Гасим попытку античита прибить приложение при детекте, предотвращая фриз
+        return; 
+    }
+    if (original_exit) original_exit(status);
+}
+
+// Безопасный перехватчик abort
+void hooked_abort(void) {
+    if (is_from_anticheat()) {
+        // Игнорируем аварийный сброс от OXIDE
+        return; 
+    }
+    if (original_abort) original_abort();
+}
+
+// Обработчик сигналов ОС (перехват SIGABRT, чтобы игра не падала по сигналу ядра)
+void handle_sigabrt(int sig, siginfo_t *info, void *context) {
+    // Если сигнал пришел от античита, перехватываем и глушим его
+    // Это защищает от зависания UI и принудительного закрытия
+}
+
+__attribute__((constructor)) void external_shield_bypass() {
+    // 1. Сброс cryptid для decrypted IPA
     const struct mach_header_64* main_header = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (main_header) {
         uint8_t* cursor = (uint8_t*)main_header + sizeof(struct mach_header_64);
@@ -72,12 +73,17 @@ __attribute__((constructor)) void enterprise_stealth_bypass() {
         }
     }
 
-    // 2. Интеграция реального хука через fishhook для подмены mach_vm_region
-    struct rebinding rb = {
-        .name = "mach_vm_region",
-        .replacement = (void*)hooked_mach_vm_region,
-        .replaced = (void**)&original_mach_vm_region
+    // 2. Ребиндинг функций завершения через fishhook
+    struct rebinding rebindings[] = {
+        { "exit",  (void*)hooked_exit,  (void**)&original_exit  },
+        { "abort", (void*)hooked_abort, (void**)&original_abort }
     };
-    
-    rebind_symbols(&rb, 1);
+    rebind_symbols(rebindings, 2);
+
+    // 3. Установка перехвата сигналов на случай низкоуровневого сброса
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = handle_sigabrt;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGABRT, &sa, NULL);
 }
