@@ -4,48 +4,46 @@
 #include <mach-o/dyld.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
+#include <signal.h>
 #include <dlfcn.h>
 #include <string.h>
 #include "fishhook.h"
 
-// Оригинальные указатели для exit / abort
+// Оригинальные указатели
+static int (*original_kill)(pid_t pid, int sig) = NULL;
 static void (*original_exit)(int status) = NULL;
 static void (*original_abort)(void) = NULL;
+static void (*original_addSubview)(id self, SEL _cmd, id view) = NULL;
 
-// Оригинальный указатель на метод показа UI-контроллеров
-static void (*original_presentViewController)(id self, SEL _cmd, id viewControllerToPresent, BOOL flag, void (^completion)(void)) = NULL;
-
-// Наш хук для перехвата показа модальных окон (UIAlertController)
-void hooked_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BOOL flag, void (^completion)(void)) {
-    // Проверяем, является ли показываемое окно алертом
-    if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
-        UIAlertController *alert = (UIAlertController *)viewControllerToPresent;
-        NSString *title = alert.title;
-        NSString *message = alert.message;
-        
-        // Если в заголовке или сообщении есть следы античита OXIDE / угрозы безопасности
-        if ((title && ([title rangeOfString:@"OXIDE" options:NSCaseInsensitiveSearch].location != NSNotFound || 
-                       [title rangeOfString:@"security" options:NSCaseInsensitiveSearch].location != NSNotFound)) ||
-            (message && ([message rangeOfString:@"OXIDE" options:NSCaseInsensitiveSearch].location != NSNotFound || 
-                         [message rangeOfString:@"threat" options:NSCaseInsensitiveSearch].location != NSNotFound))) {
-            
-            // Глушим показ этого окна на корню! Окно просто не появится, а игра продолжит жить.
-            return;
-        }
+// 1. Хук для kill: если античит пытается прибить процесс через SIGKILL / SIGABRT
+int hooked_kill(pid_t pid, int sig) {
+    if (pid == getpid() && (sig == SIGKILL || sig == SIGABRT || sig == SIGTERM)) {
+        // Игнорируем попытку самоубийства процесса, возвращаем успех, античит обманут!
+        return 0;
     }
-    
-    // Все остальные окна (меню, интерфейс игры) показываем штатно
-    if (original_presentViewController) {
-        original_presentViewController(self, _cmd, viewControllerToPresent, flag, completion);
+    if (original_kill) {
+        return original_kill(pid, sig);
+    }
+    return -1;
+}
+
+// 2. Хук для перехвата добавления кастомных UI-элементов (если это кастомный UIView от античита)
+void hooked_addSubview(id self, SEL _cmd, id view) {
+    // Проверяем класс добавляемого элемента на предмет подозрительных алертов или кастомных окон
+    if (view && [NSStringFromClass([view class]) rangeOfString:@"Alert" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+        // Глушим добавление защитного окна на экран
+        return;
+    }
+    if (original_addSubview) {
+        original_addSubview(self, _cmd, view);
     }
 }
 
-// Заглушки для exit и abort
 void hooked_exit(int status) { return; }
 void hooked_abort(void) { return; }
 
-__attribute__((constructor)) void ui_shield_bypass() {
-    // 1. Сброс флага cryptid для decrypted IPA
+__attribute__((constructor)) void impenetrable_shield_bypass() {
+    // 1. Сброс cryptid для decrypted IPA
     const struct mach_header_64* main_header = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (main_header) {
         uint8_t* cursor = (uint8_t*)main_header + sizeof(struct mach_header_64);
@@ -62,20 +60,21 @@ __attribute__((constructor)) void ui_shield_bypass() {
         }
     }
 
-    // 2. Хукаем метод presentViewController через Objective-C Runtime
-    Class uiViewControllerClass = objc_getClass("UIViewController");
-    if (uiViewControllerClass) {
-        SEL selector = sel_registerName("presentViewController:animated:completion:");
-        Method method = class_getInstanceMethod(uiViewControllerClass, selector);
-        if (method) {
-            original_presentViewController = (void (*)(id, SEL, id, BOOL, void (^)(void)))method_setImplementation(method, (IMP)hooked_presentViewController);
-        }
-    }
-
-    // 3. Дублируем страховку через fishhook для exit и abort
+    // 2. Перехват через fishhook (exit, abort, kill)
     struct rebinding rebindings[] = {
         { "exit",  (void*)hooked_exit,  (void**)&original_exit  },
-        { "abort", (void*)hooked_abort, (void**)&original_abort }
+        { "abort", (void*)hooked_abort, (void**)&original_abort },
+        { "kill",  (void*)hooked_kill,  (void**)&original_kill  }
     };
-    rebind_symbols(rebindings, 2);
+    rebind_symbols(rebindings, 3);
+
+    // 3. Перехват на уровне UIView (addSubview) для борьбы с кастомными окнами алертов
+    Class uiViewClass = objc_getClass("UIView");
+    if (uiViewClass) {
+        SEL selector = sel_registerName("addSubview:");
+        Method method = class_getInstanceMethod(uiViewClass, selector);
+        if (method) {
+            original_addSubview = (void (*)(id, SEL, id))method_setImplementation(method, (IMP)hooked_addSubview);
+        }
+    }
 }
