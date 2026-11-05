@@ -11,16 +11,16 @@
 #import <Foundation/Foundation.h>
 #include "fishhook.h"
 
-// Оригинальные указатели
+// Оригинальные указатели для перехвата
 static int (*original_kill)(pid_t pid, int sig) = NULL;
 static void (*original_exit)(int status) = NULL;
 static void (*original_abort)(void) = NULL;
-static void (*original_addSubview)(id self, SEL _cmd, id view) = NULL;
+static void (*original_presentViewController)(id self, SEL _cmd, id viewControllerToPresent, BOOL flag, void (^completion)(void)) = NULL;
 
-// 1. Реализация хуков
+// 1. Безопасные хуки для глушения завершения процесса
 int hooked_kill(pid_t pid, int sig) {
     if (pid == getpid() && (sig == SIGKILL || sig == SIGABRT || sig == SIGTERM)) {
-        return 0; // Игнорируем попытку убить процесс
+        return 0; // Игнорируем попытку убить процесс изнутри
     }
     if (original_kill) {
         return original_kill(pid, sig);
@@ -36,20 +36,20 @@ void hooked_abort(void) {
     return; // Глушим аварийный abort
 }
 
-void hooked_addSubview(id self, SEL _cmd, id view) {
-    if (view) {
-        Class viewClass = [view class];
-        // Явный каст через (NSString *) решает проблему видимости метода UTF8String
-        id classNameObj = ((id (*)(id, SEL))objc_msgSend)((id)viewClass, sel_registerName("description"));
+// 2. Интеллектуальный перехват модальных окон (уничтожаем алерт OXIDE на подлете)
+void hooked_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BOOL flag, void (^completion)(void)) {
+    if (viewControllerToPresent) {
+        Class vcClass = [viewControllerToPresent class];
+        id classNameObj = ((id (*)(id, SEL))objc_msgSend)((id)vcClass, sel_registerName("description"));
         if (classNameObj) {
             const char *classNameUtf8 = [(NSString *)classNameObj UTF8String];
-            if (classNameUtf8 && strcasestr(classNameUtf8, "Alert") != NULL) {
-                return; // Глушим показ кастомных алертов античита
+            if (classNameUtf8 && (strcasestr(classNameUtf8, "Alert") != NULL || strcasestr(classNameUtf8, "Security") != NULL)) {
+                return; // Глушим показ окна угрозы безопасности OXIDE на корню!
             }
         }
     }
-    if (original_addSubview) {
-        original_addSubview(self, _cmd, view);
+    if (original_presentViewController) {
+        original_presentViewController(self, _cmd, viewControllerToPresent, flag, completion);
     }
 }
 
@@ -64,7 +64,7 @@ __attribute__((constructor)) void impenetrable_shield_bypass() {
                 struct encryption_info_command_64* eic = (struct encryption_info_command_64*)lc;
                 uintptr_t page_size = sysconf(_SC_PAGESIZE);
                 if (mprotect((void*)((uintptr_t)&eic->cryptid & ~(page_size - 1)), page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
-                    eic->cryptid = 0; // Сбрасываем флаг шифрования
+                    eic->cryptid = 0;
                 }
             }
             cursor += lc->cmdsize;
@@ -79,13 +79,13 @@ __attribute__((constructor)) void impenetrable_shield_bypass() {
     };
     rebind_symbols(rebindings, 3);
 
-    // 3. Перехват на уровне UIView (addSubview)
-    Class uiViewClass = objc_getClass("UIView");
-    if (uiViewClass) {
-        SEL selector = sel_registerName("addSubview:");
-        Method method = class_getInstanceMethod(uiViewClass, selector);
+    // 3. Перехват метода показа контроллеров (UIViewController -> presentViewController:animated:completion:)
+    Class uiViewControllerClass = objc_getClass("UIViewController");
+    if (uiViewControllerClass) {
+        SEL selector = sel_registerName("presentViewController:animated:completion:");
+        Method method = class_getInstanceMethod(uiViewControllerClass, selector);
         if (method) {
-            original_addSubview = (void (*)(id, SEL, id))method_setImplementation(method, (IMP)hooked_addSubview);
+            original_presentViewController = (void (*)(id, SEL, id, BOOL, void (^)(void)))method_setImplementation(method, (IMP)hooked_presentViewController);
         }
     }
 }
