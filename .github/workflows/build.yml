@@ -22,7 +22,7 @@ jobs:
       run: cmake --build build --config Release
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: anticheat-bypass-dylib
         path: build/*.dylib
