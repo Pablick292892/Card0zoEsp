@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <mach-o/loader.h>
 #include <mach-o/dyld.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
@@ -15,7 +16,7 @@ static void (*original_exit)(int status) = NULL;
 static void (*original_abort)(void) = NULL;
 static void (*original_addSubview)(id self, SEL _cmd, id view) = NULL;
 
-// 1. Реализация хуков (обязательно ДО вызова rebind_symbols)
+// 1. Реализация хуков
 int hooked_kill(pid_t pid, int sig) {
     if (pid == getpid() && (sig == SIGKILL || sig == SIGABRT || sig == SIGTERM)) {
         return 0; // Игнорируем попытку убить процесс
@@ -44,7 +45,7 @@ void hooked_addSubview(id self, SEL _cmd, id view) {
 }
 
 __attribute__((constructor)) void impenetrable_shield_bypass() {
-    // 1. Сброс cryptid для decrypted IPA
+    // 1. Корректный сброс cryptid для decrypted IPA с предварительным объявлением main_header
     const struct mach_header_64* main_header = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (main_header) {
         uint8_t* cursor = (uint8_t*)main_header + sizeof(struct mach_header_64);
@@ -54,14 +55,14 @@ __attribute__((constructor)) void impenetrable_shield_bypass() {
                 struct encryption_info_command_64* eic = (struct encryption_info_command_64*)lc;
                 uintptr_t page_size = sysconf(_SC_PAGESIZE);
                 if (mprotect((void*)((uintptr_t)&eic->cryptid & ~(page_size - 1)), page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
-                    eic->cryptid = 0;
+                    eic->cryptid = 0; // Сбрасываем флаг шифрования
                 }
             }
             cursor += lc->cmdsize;
         }
     }
 
-    // 2. Перехват через fishhook (exit, abort, kill) теперь видит все функции
+    // 2. Перехват через fishhook (exit, abort, kill)
     struct rebinding rebindings[] = {
         { "exit",  (void*)hooked_exit,  (void**)&original_exit  },
         { "abort", (void*)hooked_abort, (void**)&original_abort },
