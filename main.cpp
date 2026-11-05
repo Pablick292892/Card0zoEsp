@@ -3,26 +3,58 @@
 #include <sys/mman.h>
 #include <mach-o/loader.h>
 #include <mach-o/dyld.h>
-#include <string.h>
+#include <mach/mach.h>
+#include "fishhook.h"
 
-// Надежный поиск базового адреса нужного модуля по имени
-static uintptr_t get_exact_module_base(const char* name) {
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char* img_name = _dyld_get_image_name(i);
-        if (img_name && strstr(img_name, name)) {
-            const struct mach_header* hdr = _dyld_get_image_header(i);
-            intptr_t slide = _dyld_get_image_vmaddr_slide(i);
-            if (hdr) return (uintptr_t)hdr + slide;
+// Указатель на оригинальную функцию системного сканера памяти
+static kern_return_t (*original_mach_vm_region)(
+    vm_map_t target_task, 
+    mach_vm_address_t *address, 
+    mach_vm_size_t *size, 
+    vm_region_flavor_t flavor, 
+    vm_region_info_t info, 
+    mach_msg_type_number_t *count, 
+    mach_port_t *object_name
+) = NULL;
+
+// Реальный перехватчик с подменой атрибутов памяти для античита
+kern_return_t hooked_mach_vm_region(
+    vm_map_t target_task, 
+    mach_vm_address_t *address, 
+    mach_vm_size_t *size, 
+    vm_region_flavor_t flavor, 
+    vm_region_info_t info, 
+    mach_msg_type_number_t *count, 
+    mach_port_t *object_name
+) {
+    if (!original_mach_vm_region) {
+        return KERN_FAILURE;
+    }
+
+    // Вызываем оригинальный системный вызов ядра iOS
+    kern_return_t result = original_mach_vm_region(target_task, address, size, flavor, info, count, object_name);
+
+    if (result == KERN_SUCCESS && flavor == VM_REGION_BASIC_INFO_64) {
+        vm_region_basic_info_64_t basic_info = (vm_region_basic_info_64_t)info;
+        
+        // Получаем базу главного модуля для точечной маскировки
+        const struct mach_header* hdr = _dyld_get_image_header(0);
+        intptr_t slide = _dyld_get_image_vmaddr_slide(0);
+        if (hdr) {
+            uintptr_t mod_start = (uintptr_t)hdr + slide;
+            // Если античит проверяет наш диапазон памяти, где сделаны патчи, 
+            // скрываем флаг записи (PROT_WRITE), чтобы сканер видел только честный Read/Execute
+            if (*address >= mod_start && *address <= (mod_start + 0x100000)) {
+                basic_info->protection &= ~VM_PROT_WRITE;
+                basic_info->max_protection &= ~VM_PROT_WRITE;
+            }
         }
     }
-    // Резервный вариант: главный бинарник приложения
-    const struct mach_header* main_hdr = _dyld_get_image_header(0);
-    intptr_t main_slide = _dyld_get_image_vmaddr_slide(0);
-    return main_hdr ? (uintptr_t)main_hdr + main_slide : 0;
+
+    return result;
 }
 
-__attribute__((constructor)) void foolproof_bypass() {
+__attribute__((constructor)) void enterprise_stealth_bypass() {
     // 1. Корректный сброс флага шифрования cryptid для decrypted IPA
     const struct mach_header_64* main_header = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (main_header) {
@@ -33,39 +65,19 @@ __attribute__((constructor)) void foolproof_bypass() {
                 struct encryption_info_command_64* eic = (struct encryption_info_command_64*)lc;
                 uintptr_t page_size = sysconf(_SC_PAGESIZE);
                 if (mprotect((void*)((uintptr_t)&eic->cryptid & ~(page_size - 1)), page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
-                    eic->cryptid = 0; // Отключаем флаг FairPlay для распакованного бинарника
+                    eic->cryptid = 0;
                 }
             }
             cursor += lc->cmdsize;
         }
     }
 
-    // 2. Получение точной базы целевого модуля (ищем libloader, при отсутствии — главный бинарник)
-    uintptr_t base = get_exact_module_base("libloader");
-    if (!base) {
-        base = get_exact_module_base("UnityFramework");
-    }
-    if (!base) return;
-
-    // 3. Безопасный точечный патч с проверкой валидности инструкций (без слепого затирания памяти)
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    uintptr_t target_page = (base + 0x4000) & ~(page_size - 1);
-
-    // Даем права на чтение, запись и исполнение целевой странице памяти
-    if (mprotect((void*)target_page, page_size * 4, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
-        // Проверенные смещения проверок целостности и анти-тампера
-        uintptr_t offsets[] = { 0x4530, 0x4544, 0x41ec, 0x4264, 0x4304, 0x4478 };
-
-        for (int i = 0; i < 6; i++) {
-            uint32_t* target_addr = (uint32_t*)(base + offsets[i]);
-            
-            // Защита от краха: проверяем, что ячейка памяти доступна и содержит код
-            if (target_addr != NULL && *target_addr != 0x00000000) {
-                // Безопасная подмена инструкции на успешный возврат (mov w0, #0; ret),
-                // исключающая срабатывание античита и падение игровой логики
-                *(target_addr)     = 0x000080D2; // mov w0, #0
-                *(target_addr + 1) = 0xC0035FD6; // ret
-            }
-        }
-    }
+    // 2. Интеграция реального хука через fishhook для подмены mach_vm_region
+    struct rebinding rb = {
+        .name = "mach_vm_region",
+        .replacement = (void*)hooked_mach_vm_region,
+        .replaced = (void**)&original_mach_vm_region
+    };
+    
+    rebind_symbols(&rb, 1);
 }
