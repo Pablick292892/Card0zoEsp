@@ -1,13 +1,15 @@
-#include <stdint.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <mach-o/loader.h>
-#include <mach-o/dyld.h>
-#include <objc/runtime.h>
-#include <objc/message.h>
-#include <signal.h>
-#include <dlfcn.h>
-#include <string.h>
+#import <stdint.h>
+#import <unistd.h>
+#import <sys/mman.h>
+#import <mach-o/loader.h>
+#import <mach-o/dyld.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
+#import <signal.h>
+#import <dlfcn.h>
+#import <string.h>
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #include "fishhook.h"
 
 // Оригинальные указатели
@@ -45,7 +47,7 @@ void hooked_addSubview(id self, SEL _cmd, id view) {
     if (original_addSubview) {
         original_addSubview(self, _cmd, view);
     }
-} // <--- Вот эта закрывающая скобка строго на месте!
+}
 
 __attribute__((constructor)) void impenetrable_shield_bypass() {
     // 1. Сброс cryptid для decrypted IPA
