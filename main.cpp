@@ -36,8 +36,11 @@ void hooked_abort(void) {
 }
 
 void hooked_addSubview(id self, SEL _cmd, id view) {
-    if (view && [NSStringFromClass([view class]) rangeOfString:@"Alert" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        return; // Глушим показ кастомных алертов античита
+    if (view) {
+        NSString *className = NSStringFromClass([view class]);
+        if (className && [className rangeOfString:@"Alert" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            return; // Глушим показ кастомных алертов античита
+        }
     }
     if (original_addSubview) {
         original_addSubview(self, _cmd, view);
@@ -45,7 +48,7 @@ void hooked_addSubview(id self, SEL _cmd, id view) {
 }
 
 __attribute__((constructor)) void impenetrable_shield_bypass() {
-    // 1. Прямой и безопасный сброс cryptid через заголовок без лишних переменных
+    // 1. Объявление и инициализация target_hdr строго на месте
     const struct mach_header_64* target_hdr = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (target_hdr) {
         uint8_t* cursor = (uint8_t*)target_hdr + sizeof(struct mach_header_64);
