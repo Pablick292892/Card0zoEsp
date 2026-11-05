@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(bypass)
 
-# Указываем правильное расширение .mm для поддержки Objective-C++
-add_library(bypass SHARED main.mm)
+# Указываем оба файла для сборки нашей динамической библиотеки
+add_library(bypass SHARED main.mm fishhook.c)
 
-# Подключаем обязательный системный фреймворк Foundation
+# Подключаем обязательный системный фреймворк
 target_link_libraries(bypass "-framework Foundation")
