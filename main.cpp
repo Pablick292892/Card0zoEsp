@@ -45,11 +45,10 @@ void hooked_addSubview(id self, SEL _cmd, id view) {
 }
 
 __attribute__((constructor)) void impenetrable_shield_bypass() {
-    // 1. Безопасный сброс cryptid с точным указателем на 64-битный заголовок
-    const struct mach_header* raw_hdr = _dyld_get_image_header(0);
-    if (raw_hdr) {
-        const struct mach_header_64* target_hdr = (const struct mach_header_64*)raw_hdr;
-        uint8_t* cursor = (uint8_t*)raw_hdr + sizeof(struct mach_header_64);
+    // 1. Прямой и безопасный сброс cryptid через заголовок без лишних переменных
+    const struct mach_header_64* target_hdr = (const struct mach_header_64*)_dyld_get_image_header(0);
+    if (target_hdr) {
+        uint8_t* cursor = (uint8_t*)target_hdr + sizeof(struct mach_header_64);
         for (uint32_t i = 0; i < target_hdr->ncmds; i++) {
             struct load_command* lc = (struct load_command*)cursor;
             if (lc->cmd == LC_ENCRYPTION_INFO_64) {
