@@ -36,7 +36,7 @@ void hooked_abort(void) {
     return; // Глушим аварийный abort
 }
 
-// 2. Интеллектуальный перехват модальных окон (уничтожаем алерт OXIDE на подлете)
+// 2. Интеллектуальный перехват модальных окон
 void hooked_presentViewController(id self, SEL _cmd, id viewControllerToPresent, BOOL flag, void (^completion)(void)) {
     if (viewControllerToPresent) {
         Class vcClass = [viewControllerToPresent class];
@@ -44,7 +44,7 @@ void hooked_presentViewController(id self, SEL _cmd, id viewControllerToPresent,
         if (classNameObj) {
             const char *classNameUtf8 = [(NSString *)classNameObj UTF8String];
             if (classNameUtf8 && (strcasestr(classNameUtf8, "Alert") != NULL || strcasestr(classNameUtf8, "Security") != NULL)) {
-                return; // Глушим показ окна угрозы безопасности OXIDE на корню!
+                return; // Глушим показ окна угрозы безопасности OXIDE
             }
         }
     }
@@ -53,7 +53,36 @@ void hooked_presentViewController(id self, SEL _cmd, id viewControllerToPresent,
     }
 }
 
+// Функция скрытия загруженного образа из списков dyld (Stealth Mode)
+static void hide_our_dylib() {
+    uint32_t image_count = _dyld_image_count();
+    for (uint32_t i = 0; i < image_count; i++) {
+        const char *image_name = _dyld_get_image_name(i);
+        if (image_name && strcasestr(image_name, "bypass") != NULL) {
+            // Нашли наш образ в памяти. 
+            // Пытаемся затереть имя или модифицировать указатели заголовка, 
+            // чтобы сканеры античита по списку образов не смогли нас идентифицировать.
+            Dl_info info;
+            if (dladdr((void *)&hide_our_dylib, &info) != 0) {
+                struct mach_header_64 *hdr = (struct mach_header_64 *)info.dli_fbase;
+                if (hdr) {
+                    // Обнуляем количество команд загрузки или маскируем майн-хедер для dyld-сканеров
+                    // Превращаем секцию в «невидимую» для стандартных итераторов
+                    uintptr_t page_size = sysconf(_SC_PAGESIZE);
+                    if (mprotect((void *)((uintptr_t)hdr & ~(page_size - 1)), page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+                        hdr->ncmds = 0; // Сбиваем счетчик команд загрузки для внешних парсеров
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
 __attribute__((constructor)) void impenetrable_shield_bypass() {
+    // 0. Прячем модуль от сканеров dyld
+    hide_our_dylib();
+
     // 1. Сброс cryptid для decrypted IPA
     const struct mach_header_64* target_hdr = (const struct mach_header_64*)_dyld_get_image_header(0);
     if (target_hdr) {
@@ -79,7 +108,7 @@ __attribute__((constructor)) void impenetrable_shield_bypass() {
     };
     rebind_symbols(rebindings, 3);
 
-    // 3. Перехват метода показа контроллеров (UIViewController -> presentViewController:animated:completion:)
+    // 3. Перехват метода показа контроллеров
     Class uiViewControllerClass = objc_getClass("UIViewController");
     if (uiViewControllerClass) {
         SEL selector = sel_registerName("presentViewController:animated:completion:");
